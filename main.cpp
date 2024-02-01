@@ -1,7 +1,6 @@
 #include <sys/socket.h>
 #include <string.h>
 #include <fcntl.h>
-#include <sys/sendfile.h>
 #include <unistd.h>
 #include <netinet/in.h>
 #include <stdio.h>
@@ -12,10 +11,12 @@
 //include <format>
 #include <string.h>
 #include <thread>
-#include <uuid_v4/uuid_v4.h>
-#include <uuid_v4/endianness.h>
+#include "user.hpp"
+#include <vector>
+#include "logging.hpp"
 
 int stat = 0;
+std::vector<User> users;
 
 std::size_t ReadUleb128(const char* addr, unsigned long* ret) 
 {
@@ -109,38 +110,7 @@ void manage_pkt(unsigned long len, char *pkt)
 
 void manage_sv(int sock)
 {
-	char buffer[1024] = {0};
-	char *ptr = buffer;
-	char *buff2;
-	unsigned long len = 0;
-	std::string uname;
-	UUIDv4::UUID uuid;
-	
-	while(1)
-	{
-		if (*ptr == '\0')
-		{
-			ptr = buffer;
-			recv(sock, buffer, 1023, 0);
-			len = (unsigned long)buffer[0];
-		}
-		else
-		{
-			len = (unsigned long)*ptr;
-		}
-		buff2 = (char *)calloc(len + 1, sizeof(char));
 
-		ptr = ptr + 2;
-		strncpy(buff2, ptr, len);
-		if (stat == 0)
-			manage_pkt(len, buff2);
-		else if (stat == 2)
-		{
-			manage_login(len, buff2, uname, uuid, sock);
-		}
-		free(buff2);
-		ptr = ptr + len;
-	}
 }
 
 int main()
@@ -151,11 +121,13 @@ int main()
 		htons(25565),
 		0
 	};
+	log("This server is for testing and educational purposes, it will never be as good as vanilla/paper servers");
 	if (bind(sockfd, (sockaddr *)&addr, sizeof(addr)) == -1)
 	{
-		std::cout << "Bind failed\n";
+		log_err("Bind failed");
 		return -1;
 	}
+	log("Server listening at ", "0.0.0.0:25565");
 	while (1)
 	{
 		int client_fd = 0;
