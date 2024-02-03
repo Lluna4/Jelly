@@ -8,38 +8,17 @@
 #include <string>
 #include <stdio.h>
 #include <stdlib.h>
+#include <chrono>
 //include <format>
 #include <string.h>
 #include <thread>
-#include "user.hpp"
 #include <vector>
-#include "logging.hpp"
+#include "packet_manager.hpp"
 
 int stat = 0;
 std::vector<User> users;
 
-std::size_t ReadUleb128(const char* addr, unsigned long* ret) 
-{
-  unsigned long result = 0;
-  int shift = 0;
-  std::size_t count = 0;
-  
 
-  	while (1) {
-    unsigned char byte = *reinterpret_cast<const unsigned char*>(addr);
-    addr++;
-    count++;
-
-    result |= (byte & 0x7f) << shift;
-    shift += 7;
-
-    if (!(byte & 0x80)) break;
-  }
-
-  *ret = result;
-
-  return count;
-}
 
 std::size_t WriteUleb128(std::string &dest, unsigned long val) {
   std::size_t count = 0;
@@ -70,32 +49,31 @@ void send_pkt_succ(std::string uname, UUIDv4::UUID uuid, int sock)
 	WriteUleb128(pkt, 0x00);
 	send(sock, pkt.c_str(), pkt.length(), 0);
 	std::cout <<  uname.length() + 16 + 3 << 4 << uuid.str() << uname.length() << uname << 0 << std::endl;
-	std::cout <<  uuid.bytes() << std::endl;
-	std::cout << pkt << std::endl;
-	stat = -1;
 }
 
-void manage_login(unsigned long len, char *pkt, std::string &uname, UUIDv4::UUID &uuid, int sock)
+User manage_login(unsigned long len, char *pkt, int sock)
 {
 	unsigned long str = 0;
-	UUIDv4::UUIDGenerator<std::mt19937_64> uuidGenerator;
 	ReadUleb128(pkt, &str);
+	std::string uname;
 	uname = pkt;
 	uname = uname.substr(1, str);
-	std::cout << pkt << std::endl;
-	std::cout << uname << std::endl;
 	pkt = pkt + str + 1;
-	uuid = uuidGenerator.getUUID();
-	std::cout << uuid.str() << std::endl;
-	send_pkt_succ(uname, uuid, sock);
+	User new_user(uname, sock);
+	send_pkt_succ(uname, new_user.get_uuid(), sock);
+	log("New user ");
+	log("Name: ", uname);
+	log("UUID: ", new_user.get_uuid().str());
+	return new_user;
 }
 
-void manage_pkt(unsigned long len, char *pkt)
+void manage_pkt(unsigned long len, char *pkt, int *stat)
 {
 	unsigned long ver = 0;
 	unsigned long str = 0;
 	std::size_t prot_size = 0;
 	prot_size = ReadUleb128(pkt, &ver);
+	log("Protocol version ", ver);
 	if (ver == 765)
 	{
 		pkt = pkt + prot_size;
@@ -103,14 +81,43 @@ void manage_pkt(unsigned long len, char *pkt)
 		pkt = pkt + 1;
 		//std::cout << pkt << std::endl;
 		pkt = pkt + (str + 2);
-		std::cout << (int)*pkt << std::endl;
-		stat = (int)*pkt;
+		log((int)*pkt);
+		*stat = (int)*pkt;
 	}
 }
 
 void manage_sv(int sock)
 {
-
+	log("New client");
+	std::vector<packet> packets;
+	std::thread manager(pkt_manager, sock, std::ref(packets));
+	manager.detach();
+	int status = 0;
+	User th_user;
+	while (1)
+	{
+		if (packets.empty() == false)
+		{
+			switch (packets.begin()->id)
+			{
+				case 0x00:
+					log("HS packet ", status);
+					if (status == 0)
+						manage_pkt(packets.begin()->lenght, (char *)packets.begin()->data.c_str(), &status);
+					else if (status == 2)
+					{	
+						User buff = manage_login(packets.begin()->lenght, (char *)packets.begin()->data.c_str(), sock);
+						th_user.set_socket(buff.get_socket());
+						th_user.set_uname(buff.get_uname());
+						th_user.set_uuid(buff.get_uuid());
+						status = -1;
+					}
+					break;
+			}
+			packets.erase(packets.begin());
+		}
+	}
+	std::this_thread::sleep_for(std::chrono::milliseconds(20));
 }
 
 int main()
@@ -118,7 +125,7 @@ int main()
 	int sockfd = socket(AF_INET, SOCK_STREAM, 0);
 	struct sockaddr_in addr = {
 		AF_INET,
-		htons(25565),
+		htons(25566),
 		0
 	};
 	log("This server is for testing and educational purposes, it will never be as good as vanilla/paper servers");
@@ -127,7 +134,7 @@ int main()
 		log_err("Bind failed");
 		return -1;
 	}
-	log("Server listening at ", "0.0.0.0:25565");
+	log("Server listening at ", "0.0.0.0:25566");
 	while (1)
 	{
 		int client_fd = 0;

@@ -32,6 +32,21 @@ class User
             return socket_;
         }
 
+        void set_uuid(UUIDv4::UUID uuid_)
+        {
+            uuid = uuid_;
+        }
+
+        void set_uname(std::string uname)
+        {
+            uname_ = uname;
+        }
+
+        void set_socket(int socket)
+        {
+            socket_ = socket;
+        }
+
     private:
         UUIDv4::UUID uuid;
         std::string uname_;
