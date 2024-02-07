@@ -29,7 +29,8 @@ void process_packet(char *pkt, std::vector<packet> &packets)
 		pkt++;
 		p.id = (int)*pkt;
 		data = (char *)calloc(p.size, sizeof(char));
-		std::memcpy(data, pkt++, p.size - 2);
+		pkt++;
+		std::memcpy(data, pkt, p.size - 1);
 		p.data = strdup(data);
 		free(data);
 		pkt = next;

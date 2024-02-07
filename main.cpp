@@ -12,6 +12,21 @@
 int SV_PORT = 25565;
 thread_man manager;
 
+int execute_pkt(packet p, int state)
+{
+	int ret = 0;
+	switch (p.id)
+	{
+		case 0:
+			if (state == 0)
+				ret = (int)*(p.data + p.size - 2);
+			else if (state == 2)
+
+			break;
+	}
+	return ret;
+}
+
 void manage_client(std::stop_token stoken, int sock)
 {
 	int status = 0;
@@ -28,6 +43,14 @@ void manage_client(std::stop_token stoken, int sock)
 		log("New packet");
 		log("Id: ", packets.begin()->id);
 		log("Size: ", packets.begin()->size);
+		std::cout << "Data: ";
+		for (int i = 0; i < strlen(packets.begin()->data);i++)
+		{
+			printf("%02hhX ", (int)packets.begin()->data[i]);
+		}
+		std::cout << "\n";
+		status = execute_pkt(packets[0], status);
+		log("New state: ", status);
 		packets.erase(packets.begin());
 	}
 }
