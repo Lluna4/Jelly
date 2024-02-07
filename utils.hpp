@@ -2,8 +2,8 @@
 
 struct packet
 {
-	int id;
-	int size;
+	unsigned long id;
+	unsigned long size;
 	char *data;
 };
 

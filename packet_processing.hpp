@@ -16,18 +16,18 @@
 void process_packet(char *pkt, std::vector<packet> &packets)
 {
 	int lenght = 0;
-	char *next;
-	struct packet p;
-	char *data;
+	char *next = NULL;
+	struct packet p = {0};
+	char *data = NULL;
 	
 	while(1)
 	{
 		if (*pkt == '\0')
 			break;
-		p.size = (int)*pkt;
+		ReadUleb128(pkt, &(p.size));
 		next = pkt + (p.size + 1);
 		pkt++;
-		p.id = (int)*pkt;
+		ReadUleb128(pkt, &(p.id));
 		data = (char *)calloc(p.size, sizeof(char));
 		pkt++;
 		std::memcpy(data, pkt, p.size - 1);
@@ -44,17 +44,16 @@ void packet_reader(std::stop_token stoken, std::vector<packet> &packets, int soc
 	struct pollfd pfds[1];
 	int status = 0;
 	int num_events = 0;
-	char buffer[1025] = {0};
+	char *buffer = (char *)calloc(1024, sizeof(char));
 	pfds[0].fd = sock;
 	pfds[0].events = POLLIN;
-	char *pkt;
 	
 	while(1)
 	{
 		if (stoken.stop_requested())
 		{
 			close(sock);
-			return;
+			break;
 		}
 		num_events = poll(pfds, 1, 1000);
 		if (num_events == 0)
@@ -64,7 +63,8 @@ void packet_reader(std::stop_token stoken, std::vector<packet> &packets, int soc
 			break;
 		if (buffer[0] == '\0')
 			break;
-		pkt = buffer;
-		process_packet(pkt, packets);	
+		process_packet(buffer, packets);
+		memset(buffer, 0, 1024);
 	}
+	free(buffer);
 }
