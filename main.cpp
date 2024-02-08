@@ -78,6 +78,7 @@ void manage_client(std::stop_token stoken, int sock)
 		std::cout << "\n";
 		status = execute_pkt(packets[0], status, user);
 		log("New state: ", status);
+		free(packets.begin()->data);
 		packets.erase(packets.begin());
 	}
 }
