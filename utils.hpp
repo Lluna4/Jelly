@@ -47,3 +47,27 @@ std::size_t WriteUleb128(std::string &dest, unsigned long val)
 
   return count;
 }
+
+unsigned long read_string(char *str, std::string &dest)
+{
+	unsigned long ret = 0;
+
+	ReadUleb128(str, &ret);
+	str++;
+	dest = str;
+	dest = dest.substr(0, ret);
+	return ret;
+}
+
+
+std::string read_string(char *str)
+{
+	unsigned long ret = 0;
+	std::string dest;
+
+	ReadUleb128(str, &ret);
+	str++;
+	dest = str;
+	dest = dest.substr(0, ret);
+	return dest;
+}

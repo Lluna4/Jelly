@@ -31,6 +31,8 @@ int execute_pkt(packet p, int state, User &user)
 	int ret = state;
 	unsigned long size = 0;
 	std::string uname;
+	std::string buf;
+	unsigned long buf2 = 0;
 	switch (p.id)
 	{
 		case 0:
@@ -47,7 +49,31 @@ int execute_pkt(packet p, int state, User &user)
 				login_succ(user);
 				ret = 3;
 			}
+			else if (state == 4)
+			{
+				buf2 = read_string(p.data, buf);
+				user.set_locale(buf);
+				user.set_render_distance((int)p.data[buf2 + 1]);
+				log("New locale: ", user.get_locale());
+				log("New render distance: ", user.get_render_distance());
+				buf.clear();
+				buf.push_back((strlen("Server in development") + 4));
+				buf.push_back(0x01);
+				buf.push_back(0x08);
+				buf.push_back(0x00);
+				buf.push_back(strlen("Server in development"));
+				buf.append("Server in development");
+				send(user.get_socket(), buf.c_str(), buf.length(), 0);
+
+			}
 			break;
+		case 3:
+			if (state == 3)
+			{
+				log("login awknoleged by the client");
+				ret = 4;
+			}
+
 	}
 	return ret;
 }
@@ -73,7 +99,10 @@ void manage_client(std::stop_token stoken, int sock)
 		std::cout << "Data: ";
 		for (int i = 0; i < strlen(packets.begin()->data);i++)
 		{
-			printf("%02hhX ", (int)packets.begin()->data[i]);
+			if (isalnum(packets.begin()->data[i]))
+				printf("%c ", packets.begin()->data[i]);
+			else
+				printf("%02hhX ", (int)packets.begin()->data[i]);
 		}
 		std::cout << "\n";
 		status = execute_pkt(packets[0], status, user);
