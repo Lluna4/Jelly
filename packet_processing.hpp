@@ -52,19 +52,29 @@ void packet_reader(std::stop_token stoken, std::vector<packet> &packets, int soc
 	{
 		if (stoken.stop_requested())
 		{
-			close(sock);
 			break;
 		}
 		num_events = poll(pfds, 1, 1000);
 		if (num_events == 0)
 			continue;
+		if (num_events == -1)
+		{
+			break;
+		}
 		status = read(sock, buffer, 1024);
 		if (status == -1)
+		{
 			break;
+		}
+			
 		if (buffer[0] == '\0')
+		{
 			break;
+		}
 		process_packet(buffer, packets);
 		memset(buffer, 0, 1024);
 	}
+	log("stopped networking thread");
+	close(sock);
 	free(buffer);
 }

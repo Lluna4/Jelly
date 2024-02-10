@@ -56,15 +56,15 @@ class User
             return socket_;
         }
 
-	std::string get_locale()
-	{
-		return locale;
-	}
-	
-	int get_render_distance()
-	{
-		return render_distance;
-	}
+        std::string get_locale()
+        {
+            return locale;
+        }
+        
+        int get_render_distance()
+        {
+            return render_distance;
+        }
 
         void set_uuid(UUIDv4::UUID uuid_)
         {
@@ -81,20 +81,20 @@ class User
             socket_ = socket;
         }
 
-	void set_locale(std::string locale_)
-	{
-		locale = locale_;
-	}
+        void set_locale(std::string locale_)
+        {
+            locale = locale_;
+        }
 
-	void set_render_distance(int render)
-	{
-		render_distance = render;
-	}
+        void set_render_distance(int render)
+        {
+            render_distance = render;
+        }
 
     private:
         UUIDv4::UUID uuid;
         std::string uname_;
         int socket_;
-	std::string locale;
-	int render_distance;
+	    std::string locale;
+	    int render_distance;
 };

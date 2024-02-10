@@ -26,7 +26,7 @@ void login_succ(User user)
 	std::cout <<  user.get_uname().length() + 16 + 3 << 4 << user.get_uuid().str() << user.get_uname().length() << user.get_uname() << 0 << std::endl;
 }
 
-int execute_pkt(packet p, int state, User &user)
+int execute_pkt(packet p, int state, User &user, int index)
 {
 	int ret = state;
 	unsigned long size = 0;
@@ -64,7 +64,8 @@ int execute_pkt(packet p, int state, User &user)
 				buf.push_back(strlen("Server in development"));
 				buf.append("Server in development");
 				send(user.get_socket(), buf.c_str(), buf.length(), 0);
-
+				manager.request_stop_thread(index);
+				manager.request_stop_thread(index - 1);
 			}
 			break;
 		case 3:
@@ -86,8 +87,15 @@ void manage_client(std::stop_token stoken, int sock)
 	manager.add_thread(func, sock, packets);
 	User user;
 	user.set_socket(sock);
+	int index = manager.get_current_index();
 	while (1)
 	{
+		if (stoken.stop_requested())
+		{
+			log("stopped processing thread");
+			close(sock);
+			return;
+		}
 		if (packets.empty())
 		{
 			std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -105,7 +113,7 @@ void manage_client(std::stop_token stoken, int sock)
 				printf("%02hhX ", (int)packets.begin()->data[i]);
 		}
 		std::cout << "\n";
-		status = execute_pkt(packets[0], status, user);
+		status = execute_pkt(packets[0], status, user, index);
 		log("New state: ", status);
 		free(packets.begin()->data);
 		packets.erase(packets.begin());
