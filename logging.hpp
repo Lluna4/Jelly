@@ -132,3 +132,8 @@ void log(T value, B value2)
 {
     std::cout << "[" << get_time() << "] " << value << value2 << std::endl;
 }
+
+void log_header()
+{
+	std::cout << "[" << get_time() << "] ";
+}

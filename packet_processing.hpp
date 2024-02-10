@@ -8,6 +8,7 @@
 #include <thread>
 #include <vector> 
 #include "utils.hpp"
+#include "logging.hpp"
 #include <cstring>
 #include <stdlib.h>
 

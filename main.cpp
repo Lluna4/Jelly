@@ -2,15 +2,15 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include "thread_manager.hpp"
-#include "logging.hpp"
 #include "packet_processing.hpp"
 #include "user.hpp"
 #include <poll.h>
 #include <fcntl.h>
 #include <chrono>
 #include <string>
+#include "config.hpp"
+#include <filesystem>
 
-int SV_PORT = 25565;
 thread_man manager;
 
 void login_succ(User user)
@@ -23,6 +23,7 @@ void login_succ(User user)
 	pkt.append(user.get_uname());
 	WriteUleb128(pkt, 0x00);
 	send(user.get_socket(), pkt.c_str(), pkt.length(), 0);
+	log_header();
 	std::cout <<  user.get_uname().length() + 16 + 3 << 4 << user.get_uuid().str() << user.get_uname().length() << user.get_uname() << 0 << std::endl;
 }
 
@@ -57,12 +58,12 @@ int execute_pkt(packet p, int state, User &user, int index)
 				log("New locale: ", user.get_locale());
 				log("New render distance: ", user.get_render_distance());
 				buf.clear();
-				buf.push_back((strlen("Server in development") + 4));
+				buf.push_back((dc_msg.length() + 4));
 				buf.push_back(0x01);
 				buf.push_back(0x08);
 				buf.push_back(0x00);
-				buf.push_back(strlen("Server in development"));
-				buf.append("Server in development");
+				buf.push_back(dc_msg.length());
+				buf.append(dc_msg);
 				send(user.get_socket(), buf.c_str(), buf.length(), 0);
 				manager.request_stop_thread(index);
 				manager.request_stop_thread(index - 1);
@@ -104,6 +105,7 @@ void manage_client(std::stop_token stoken, int sock)
 		log("New packet");
 		log("Id: ", packets.begin()->id);
 		log("Size: ", packets.begin()->size);
+		log_header();
 		std::cout << "Data: ";
 		for (int i = 0; i < strlen(packets.begin()->data);i++)
 		{
@@ -125,6 +127,15 @@ int main()
 	
 	int sock = socket(AF_INET, SOCK_STREAM, 0);
 	fcntl(sock, F_SETFL, O_NONBLOCK);
+
+	if (std::filesystem::exists("server.properties") == false)
+	{
+		create_config();
+		log("Config created!");
+	}
+	load_config();
+    if (SV_PORT > 0xFFFF)
+		log_err(std::format("Warning! The port provided in the config is higher than {} the port will be truncated into {}", 0xFFFF, (short)SV_PORT));
 	struct sockaddr_in addr =
 	{
 		AF_INET, 
@@ -138,7 +149,7 @@ int main()
 		log_err("Bind failed");
 		return -1;
 	}
-	log("Server listening at ", "0.0.0.0:25566");
+	log(std::format("Server listening to {}:{}", SV_IP, SV_PORT));
 	while (1)
 	{
 		int client_fd = 0;
