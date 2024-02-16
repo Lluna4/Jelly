@@ -1,15 +1,12 @@
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
 #include "thread_manager.hpp"
 #include "packet_processing.hpp"
-#include "user.hpp"
 #include <poll.h>
 #include <fcntl.h>
 #include <chrono>
 #include <string>
 #include "config.hpp"
 #include <filesystem>
+#include "packet_send.hpp"
 
 thread_man manager;
 
@@ -224,7 +221,7 @@ int execute_pkt(packet p, int state, User &user, int index)
 				send(user.get_socket(), buf.c_str(), buf.length(), 0);
 				manager.request_stop_thread(index);
 				manager.request_stop_thread(index - 1);*/
-				login_play(user);
+				alloc_and_send(LOGIN_PLAY, DEFAULT, user);
 				//set_spawn_pos(user);
 				//sync_client(user);
 				//game_event(13, 0.0f, user);

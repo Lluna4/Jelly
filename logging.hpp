@@ -1,3 +1,4 @@
+#pragma once
 #include <string>
 #include <ctime>
 #include <cstring>
@@ -119,6 +120,12 @@ template<typename T>
 void log_err(T value)
 {
     std::cout <<"\x1B[91m" << "[" << get_time() << "] " << value << "\033[0m\t\t" << std::endl;
+}
+
+template<typename T, typename B>
+void log_err(T value, B value2)
+{
+    std::cout <<"\x1B[91m" << "[" << get_time() << "] " << value << value2 <<"\033[0m\t\t" << std::endl;
 }
 
 template<typename T, typename B>

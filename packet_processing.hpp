@@ -1,3 +1,4 @@
+#pragma once
 #include <poll.h>
 #include <fcntl.h>
 #include <chrono>
