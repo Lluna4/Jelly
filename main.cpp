@@ -27,6 +27,147 @@ void login_succ(User user)
 	std::cout <<  user.get_uname().length() + 16 + 3 << 4 << user.get_uuid().str() << user.get_uname().length() << user.get_uname() << 0 << std::endl;
 }
 
+void config(int sock)
+{
+	std::string pack;
+	std::string features = "minecraft:vanilla";
+
+	pack.push_back(3 + features.length());
+	pack.push_back(0x08);
+	pack.push_back(0x01);
+	write_string(pack, features);
+	send(sock, pack.c_str(), pack.length(), 0);
+	pack.clear();
+	pack.push_back(0x01);
+	pack.push_back(0x02);
+	send(sock, pack.c_str(), pack.length(), 0);
+}
+
+void login_play(User user)
+{
+	struct packet pkt;
+	std::string data;
+	char buffer[10] = {0};
+	char *ptr = buffer;
+	std::string packet;
+	long hashed_seed = 1212343;
+	int buf = 0;
+	unsigned long varint = 110;
+	bool f = false;
+	char b = 3;
+
+	WriteUleb128(data, varint);
+	send(user.get_socket(), data.c_str(), data.length(), 0);
+	data.clear();
+	varint = 0x29;
+	WriteUleb128(data, varint);
+	send(user.get_socket(), data.c_str(), data.length(), 0);
+	send(user.get_socket(), &buf, sizeof(int), 0);
+	send(user.get_socket(), &f, sizeof(bool), 0);
+	data.clear();
+	WriteUleb128(data, 1);
+	send(user.get_socket(), data.c_str(), data.length(), 0);
+	data.clear();
+	data.push_back(strlen("minecraft:overworld"));
+	data.append("minecraft:overworld");
+	send(user.get_socket(), data.c_str(), data.length(), 0);
+	data.clear();
+	WriteUleb128(data, 1);
+	WriteUleb128(data, 1);
+	WriteUleb128(data, 1);
+	send(user.get_socket(), data.c_str(), data.length(), 0);
+	send(user.get_socket(), &f, sizeof(bool), 0);
+	send(user.get_socket(), &f, sizeof(bool), 0);
+	send(user.get_socket(), &f, sizeof(bool), 0);
+	data.clear();
+	data.push_back(strlen("minecraft:overworld"));
+	data.append("minecraft:overworld");
+	data.push_back(strlen("minecraft:overworld"));
+	data.append("minecraft:overworld");
+	send(user.get_socket(), data.c_str(), data.length(), 0);
+	send(user.get_socket(), &hashed_seed, sizeof(long), 0);
+	send(user.get_socket(), &b, sizeof(char), 0);
+	buf = -1;
+	send(user.get_socket(), &buf, sizeof(int), 0);
+	send(user.get_socket(), &f, sizeof(bool), 0);
+	send(user.get_socket(), &f, sizeof(bool), 0);
+	send(user.get_socket(), &f, sizeof(bool), 0);
+	data.clear();
+	WriteUleb128(data, 0);
+	send(user.get_socket(), data.c_str(), data.length(), 0);
+}
+
+void set_spawn_pos(User user)
+{
+	packet pkt;
+	std::string data;
+	std::string packet;
+	std::string a;
+	long long x, y , z = 0;
+	float angle = 0.0f;
+	char buffer[33] = {0};
+	char *ptr = buffer;
+
+	pkt.id = 0x54;
+	a = ((x & 0x3FFFFFF) << 38) | ((z & 0x3FFFFFF) << 12) | (y & 0xFFF);
+	std::memcpy(ptr, &a, sizeof(a));
+	data.append(ptr);
+	memset(ptr, 0, 33);
+	std::memcpy(ptr, &angle, sizeof(float));
+	data.append(ptr);
+	WriteUleb128(packet, data.size());
+	packet.append(data);
+	log(send(user.get_socket(), packet.c_str(), packet.length(), 0));
+}
+
+void sync_client(User user)
+{
+	packet pkt;
+	std::string data;
+	std::string packet;
+	char buffer[10] = {0};
+	char *ptr = buffer;
+	double x, y, z = 0.0f;
+	float yaw, pitch = 0.0f;
+
+	pkt.id = 0x3E;
+	std::memcpy(ptr, &x, sizeof(double));
+	data.append(ptr);
+	std::memcpy(ptr, &y, sizeof(double));
+	data.append(ptr);
+	std::memcpy(ptr, &z, sizeof(double));
+	data.append(ptr);
+	memset(ptr, 0, 8);
+	std::memcpy(ptr, &yaw, sizeof(float));
+	data.append(ptr);
+	std::memcpy(ptr, &pitch, sizeof(float));
+	data.append(ptr);
+	data.push_back(0);
+	data.push_back(0);
+	WriteUleb128(packet, data.size());
+	packet.append(data);
+	log(send(user.get_socket(), packet.c_str(), packet.length(), 0));
+}
+
+void game_event(unsigned char event, float value, User user)
+{
+	packet pkt;
+	std::string data;
+	std::string packet;
+	char *buffer[10] = {0};
+	char *ptr;
+
+	pkt.id = 0x20;
+	data.push_back(event);
+	std::memcpy(ptr, &value, sizeof(float));
+	data.append(ptr);
+	pkt.data = strdup(data.c_str());
+	pkt.size = data.size();
+	packet = forge_packet(pkt);
+	send(user.get_socket(), packet.c_str(), packet.length(), 0);
+	free(pkt.data);
+}
+
 int execute_pkt(packet p, int state, User &user, int index)
 {
 	int ret = state;
@@ -57,18 +198,38 @@ int execute_pkt(packet p, int state, User &user, int index)
 				user.set_render_distance((int)p.data[buf2 + 1]);
 				log("New locale: ", user.get_locale());
 				log("New render distance: ", user.get_render_distance());
-				buf.clear();
+				config(user.get_socket());
+				ret = 5;
+				/*buf.clear();
 				buf.push_back((dc_msg.length() + 4));
 				buf.push_back(0x01);
 				buf.push_back(0x08);
 				buf.push_back(0x00);
-				buf.push_back(dc_msg.length());
-				buf.append(dc_msg);
+				write_string(buf, dc_msg);
 				send(user.get_socket(), buf.c_str(), buf.length(), 0);
 				manager.request_stop_thread(index);
-				manager.request_stop_thread(index - 1);
+				manager.request_stop_thread(index - 1);*/
 			}
 			break;
+		case 2:
+			if (state == 5)
+			{
+				/*
+				buf.clear();
+				buf.push_back((dc_msg.length() + 4));
+				buf.push_back(0x1B);
+				buf.push_back(0x08);
+				buf.push_back(0x00);
+				write_string(buf, dc_msg);
+				send(user.get_socket(), buf.c_str(), buf.length(), 0);
+				manager.request_stop_thread(index);
+				manager.request_stop_thread(index - 1);*/
+				login_play(user);
+				//set_spawn_pos(user);
+				//sync_client(user);
+				//game_event(13, 0.0f, user);
+				ret = 10;
+			}
 		case 3:
 			if (state == 3)
 			{

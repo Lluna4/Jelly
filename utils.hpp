@@ -1,4 +1,5 @@
 #include <iostream>
+#include <string.h>
 
 struct packet
 {
@@ -48,6 +49,14 @@ std::size_t WriteUleb128(std::string &dest, unsigned long val)
   return count;
 }
 
+void write_string(std::string &str, std::string src)
+{
+	str.push_back(src.length());
+	str.append(src);
+}
+
+
+
 unsigned long read_string(char *str, std::string &dest)
 {
 	unsigned long ret = 0;
@@ -71,3 +80,14 @@ std::string read_string(char *str)
 	dest = dest.substr(0, ret);
 	return dest;
 }
+
+std::string forge_packet(packet pkt)
+{
+	std::string ret;
+	ret.push_back(pkt.size + 1);
+	ret.push_back(pkt.id);
+	ret.append(pkt.data);
+	return ret;
+}
+
+
