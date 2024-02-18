@@ -7,6 +7,7 @@
 #include "config.hpp"
 #include <filesystem>
 #include "packet_send.hpp"
+#include <sys/sendfile.h>
 
 thread_man manager;
 
@@ -40,6 +41,20 @@ void config(int sock)
 	send(sock, pack.c_str(), pack.length(), 0);
 }
 
+void registry_data(User user)
+{
+	std::ifstream file("registry_info.packet", std::ios::binary);
+	std::string pkt;
+	std::stringstream buffer;
+	buffer << file.rdbuf();
+	file.seekg(0, std::ios::end);
+	std::size_t size = file.tellg();
+	WriteUleb128(pkt, size + 1);
+	pkt.push_back(0x05);
+	pkt.append(buffer.str());
+	send(user.get_socket(), pkt.c_str(), pkt.length(), 0);
+}
+
 void login_play(User user)
 {
 	struct packet pkt;
@@ -47,7 +62,7 @@ void login_play(User user)
 	char buffer[10] = {0};
 	char *ptr = buffer;
 	std::string packet;
-	long hashed_seed = 1212343;
+	long hashed_seed = 0;
 	int buf = 0;
 	unsigned long varint = 110;
 	bool f = false;
@@ -195,6 +210,7 @@ int execute_pkt(packet p, int state, User &user, int index)
 				user.set_render_distance((int)p.data[buf2 + 1]);
 				log("New locale: ", user.get_locale());
 				log("New render distance: ", user.get_render_distance());
+				registry_data(user);
 				config(user.get_socket());
 				ret = 5;
 				/*buf.clear();
@@ -222,8 +238,10 @@ int execute_pkt(packet p, int state, User &user, int index)
 				manager.request_stop_thread(index);
 				manager.request_stop_thread(index - 1);*/
 				alloc_and_send(LOGIN_PLAY, DEFAULT, user);
-				//set_spawn_pos(user);
-				//sync_client(user);
+				alloc_and_send(SET_SPAWN, DEFAULT, user);
+				alloc_and_send(SYNC_POS, DEFAULT, user);
+				alloc_and_send(GAME_EVENT_13, DEFAULT, user);
+				alloc_and_send(GAME_EVENT_3, DEFAULT, user);
 				//game_event(13, 0.0f, user);
 				ret = 10;
 			}
