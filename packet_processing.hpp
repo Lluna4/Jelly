@@ -41,7 +41,7 @@ void process_packet(char *pkt, std::vector<packet> &packets)
 	}
 }
 
-void packet_reader(std::stop_token stoken, std::vector<packet> &packets, int sock)
+void packet_reader(std::stop_token stoken, std::vector<packet> &packets, int sock, bool *closed)
 {
 	struct pollfd pfds[1];
 	int status = 0;
@@ -61,22 +61,26 @@ void packet_reader(std::stop_token stoken, std::vector<packet> &packets, int soc
 			continue;
 		if (num_events == -1)
 		{
-			break;
+			*closed = true;
+			continue;
 		}
 		status = read(sock, buffer, 1024);
 		if (status == -1)
 		{
-			break;
+			*closed = true;
+			continue;
 		}
 			
 		if (buffer[0] == '\0')
 		{
-			break;
+			*closed = true;
+			continue;
 		}
 		process_packet(buffer, packets);
 		memset(buffer, 0, 1024);
 	}
 	log("stopped networking thread");
+	*closed = true;
 	close(sock);
 	free(buffer);
 }

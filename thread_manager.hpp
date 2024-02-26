@@ -30,9 +30,9 @@ class thread_man
 			index++;
 		}
 		template<typename T>
-		void add_thread(std::function<void(std::stop_token, std::vector<T> &, int)> func, int arg1, std::vector<T> &arg2)
+		void add_thread(std::function<void(std::stop_token, std::vector<T> &, int, bool *)> func, int arg1, std::vector<T> &arg2, bool *closed)
 		{
-			threads.emplace_back(func, std::ref(arg2), arg1);
+			threads.emplace_back(func, std::ref(arg2), arg1, closed);
 			index++;	
 		}
 
@@ -47,7 +47,14 @@ class thread_man
 		{
 			if (index < threads.size())
 				threads[index].request_stop();
-			//threads.erase(threads.begin() + index);
+			index--;
+			threads.erase(threads.begin() + index);
+		}
+
+		void remove_from_list(int index)
+		{
+			threads.erase(threads.begin() + index);
+			index--;
 		}
 
 		int get_current_index()
@@ -55,7 +62,23 @@ class thread_man
 			return index;
 		}
 
+		std::vector<int> get_flags()
+		{
+			return flags;
+		}
+
+		void flag(int index)
+		{
+			flags.push_back(index);
+		}
+
+		int flag_size()
+		{
+			return flags.size();
+		}
+
 	private:
 		std::vector<std::jthread> threads;
 		int index = -1;
+		std::vector<int> flags;
 };

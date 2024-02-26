@@ -259,12 +259,15 @@ int execute_pkt(packet p, int state, User &user, int index)
 void manage_client(std::stop_token stoken, int sock)
 {
 	int status = 0;
+	bool closed = false;
 	std::vector<packet> packets;
-	std::function<void(std::stop_token, std::vector<packet> &, int)> func = packet_reader;
-	manager.add_thread(func, sock, packets);
+	std::function<void(std::stop_token, std::vector<packet> &, int, bool *)> func = packet_reader;
+	manager.add_thread(func, sock, packets, &closed);
 	User user;
 	user.set_socket(sock);
 	int index = manager.get_current_index();
+	bool first = true;
+
 	while (1)
 	{
 		if (stoken.stop_requested())
@@ -273,9 +276,21 @@ void manage_client(std::stop_token stoken, int sock)
 			close(sock);
 			return;
 		}
-		if (packets.empty())
+		if (packets.empty() && first == true)
 		{
 			std::this_thread::sleep_for(std::chrono::milliseconds(100));
+			if (closed == true && first == true)
+			{
+				manager.flag(index);
+				manager.flag(index - 1);
+				first = false;
+				log("stopped processing thread");
+				break;
+			}
+			continue;
+		}
+		if (packets.empty() && first == false)
+		{
 			continue;
 		}
 		log("New packet");
@@ -328,14 +343,22 @@ int main()
 	log(std::format("Server listening to {}:{}", SV_IP, SV_PORT));
 	while (1)
 	{
+		if (manager.flag_size() > 0)
+		{
+			std::vector<int> flags = manager.get_flags();
+			for(int i = 0; i < flags.size(); i++)
+			{
+				manager.request_stop_thread(flags[i] - i);
+			}
+		}
 		int client_fd = 0;
-	        listen(sock, 32);
-        	client_fd = accept(sock, nullptr, nullptr);
-       		if (client_fd < 0) 
-        	{
+		listen(sock, 32);
+		client_fd = accept(sock, nullptr, nullptr);
+		if (client_fd < 0) 
+		{
 			std::this_thread::sleep_for(std::chrono::milliseconds(100));
-           		continue;
-        	}	
+			continue;
+		}	
 		std::function<void(std::stop_token, int)> func = manage_client;
 		manager.add_thread(func, client_fd);
 	}

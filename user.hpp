@@ -26,6 +26,13 @@ uuid gen_uuid()
 	std::cout << ret.last << std::endl;
 	return ret;
 }*/
+
+struct position
+{
+    double x, y, z = 0.0f;
+    float yaw, pitch = 0.0f;
+};
+
 class User
 {
     public:
@@ -33,6 +40,7 @@ class User
         {
             UUIDv4::UUIDGenerator<std::mt19937_64> uuidGenerator;
             uuid = uuidGenerator.getUUID();
+            pos = {.x = 0.0f, .y = 0.0f, .z = 64.0f, .yaw = 0.0f, .pitch = 0.0f};
         }
 
         User(std::string uname, int socket)
@@ -40,6 +48,7 @@ class User
         {
             UUIDv4::UUIDGenerator<std::mt19937_64> uuidGenerator;
             uuid = uuidGenerator.getUUID();
+            pos = {.x = 0.0f, .y = 0.0f, .z = 64.0f, .yaw = 0.0f, .pitch = 0.0f};
         }
 
         UUIDv4::UUID get_uuid()
@@ -65,6 +74,11 @@ class User
         int get_render_distance()
         {
             return render_distance;
+        }
+
+        struct position get_position()
+        {
+            return pos;
         }
 
         void set_uuid(UUIDv4::UUID uuid_)
@@ -98,4 +112,5 @@ class User
         int socket_;
 	    std::string locale;
 	    int render_distance;
+        struct position pos;
 };

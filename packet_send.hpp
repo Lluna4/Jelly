@@ -127,24 +127,25 @@ void login_play_default(char **mat)
 void set_spawn_default(char **mat)
 {
     long x, y, z = 0;
+    y = 200;
     long long res = ((x & 0x3FFFFFF) << 38) | ((z & 0x3FFFFFF) << 12) | (y & 0xFFF);
     float angle = 0.0f;
     memcpy(mat[0], &res, sizeof(long long));
     memcpy(mat[1], &angle, sizeof(float));
 }
 
-void sync_pos(char **mat)
+void sync_pos(char **mat, User user)
 {
-    double x, y, z = 0.0f;
-    float yaw, pitch = 0.0f;
+    struct position pos = user.get_position();
+    
     char flag = 0;
     unsigned long id = 0;
 
-    memcpy(mat[0], &x, sizeof(double));
-    memcpy(mat[1], &y, sizeof(double));
-    memcpy(mat[2], &z, sizeof(double));
-    memcpy(mat[3], &x, sizeof(float));
-    memcpy(mat[4], &y, sizeof(float));
+    memcpy(mat[0], &pos.x, sizeof(double));
+    memcpy(mat[1], &pos.y, sizeof(double));
+    memcpy(mat[2], &pos.z, sizeof(double));
+    memcpy(mat[3], &pos.yaw, sizeof(float));
+    memcpy(mat[4], &pos.pitch, sizeof(float));
     memcpy(mat[5], &flag, sizeof(char));
     write_varint(&mat[6], id);
 }
@@ -272,7 +273,7 @@ void alloc_and_send(int type, int variation, User user)
         }
         if (variation == DEFAULT)
         {
-            sync_pos(mat);
+            sync_pos(mat, user);
         }
         WriteUleb128(buf, size);
         send(user.get_socket(), buf.c_str(), buf.length(), 0);
