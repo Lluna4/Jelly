@@ -8,6 +8,9 @@
 #include <filesystem>
 #include "packet_send.hpp"
 #include <sys/sendfile.h>
+#include "packet_send_rw.hpp"
+#include <vector>
+#include <typeinfo>
 
 thread_man manager;
 
@@ -25,16 +28,12 @@ void login_succ(User user)
 	std::cout <<  user.get_uname().length() + 16 + 3 << 4 << user.get_uuid().str() << user.get_uname().length() << user.get_uname() << 0 << std::endl;
 }
 
-void config(int sock)
+void config(int sock, User user)
 {
 	std::string pack;
 	std::string features = "minecraft:vanilla";
-
-	pack.push_back(3 + features.length());
-	pack.push_back(0x08);
-	pack.push_back(0x01);
-	write_string(pack, features);
-	send(sock, pack.c_str(), pack.length(), 0);
+	
+	pkt_send({&typeid(minecraft::varint), &typeid(minecraft::string)}, {(minecraft::varint){.num = 0x01}, (minecraft::string){.len = features.length(), .string= features}}, user, 0x08);
 	pack.clear();
 	pack.push_back(0x01);
 	pack.push_back(0x02);
@@ -211,7 +210,7 @@ int execute_pkt(packet p, int state, User &user, int index)
 				log("New locale: ", user.get_locale());
 				log("New render distance: ", user.get_render_distance());
 				registry_data(user);
-				config(user.get_socket());
+				config(user.get_socket(), user);
 				ret = 5;
 				/*buf.clear();
 				buf.push_back((dc_msg.length() + 4));

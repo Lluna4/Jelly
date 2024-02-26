@@ -1,6 +1,7 @@
 #pragma once
 #include <iostream>
 #include <string.h>
+#include <sys/socket.h>
 
 struct packet
 {
@@ -91,4 +92,23 @@ std::string forge_packet(packet pkt)
 	return ret;
 }
 
+namespace minecraft
+{
+	struct string
+	{
+		unsigned long len;
+		std::string string;
+	};
 
+	struct varint
+	{
+		unsigned long num;
+	};
+}
+
+void send_varint(int fd, unsigned long val)
+{
+	std::string buf;
+	WriteUleb128(buf, val);
+	send(fd, buf.c_str(), buf.length(), 0);
+}
