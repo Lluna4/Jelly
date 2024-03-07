@@ -11,8 +11,20 @@
 #include "libs/packet_send_rw.hpp"
 #include <vector>
 #include <typeinfo>
+#if defined(__linux__)
+#  include <endian.h>
+#elif defined(__FreeBSD__) || defined(__NetBSD__)
+#  include <sys/endian.h>
+#elif defined(__OpenBSD__)
+#  include <sys/types.h>
+#  define be16toh(x) betoh16(x)
+#  define be32toh(x) betoh32(x)
+#  define be64toh(x) betoh64(x)
+#endif
 
 thread_man manager;
+
+
 
 void login_succ(User user)
 {
@@ -34,7 +46,6 @@ void config(int sock, User user)
 	std::string features = "minecraft:vanilla";
 	
 	pkt_send({&typeid(minecraft::varint), &typeid(minecraft::string)}, {(minecraft::varint){.num = 0x01}, (minecraft::string){.len = features.length(), .string= features}}, user, 0x08);
-	pack.clear();
 	pack.push_back(0x01);
 	pack.push_back(0x02);
 	send(sock, pack.c_str(), pack.length(), 0);
@@ -199,7 +210,19 @@ int execute_pkt(packet p, int state, User &user, int index)
 				uname = p.data;
 				uname = uname.substr(1, size);
 				user.set_uname(uname);
-				login_succ(user);
+				pkt_send(
+					{
+						&typeid(minecraft::uuid), 
+						&typeid(minecraft::string),
+						&typeid(minecraft::varint)
+					}, 
+					{
+						(minecraft::uuid){.data = user.get_uuid().bytes()},
+						(minecraft::string){.len = uname.length(), .string = uname},
+						(minecraft::varint){.num = 0}
+					},
+					user,
+					0x02);
 				ret = 3;
 			}
 			else if (state == 4)
@@ -236,11 +259,62 @@ int execute_pkt(packet p, int state, User &user, int index)
 				send(user.get_socket(), buf.c_str(), buf.length(), 0);
 				manager.request_stop_thread(index);
 				manager.request_stop_thread(index - 1);*/
-				alloc_and_send(LOGIN_PLAY, DEFAULT, user);
-				alloc_and_send(SET_SPAWN, DEFAULT, user);
-				alloc_and_send(SYNC_POS, DEFAULT, user);
-				alloc_and_send(GAME_EVENT_13, DEFAULT, user);
-				alloc_and_send(GAME_EVENT_3, DEFAULT, user);
+				std::vector<const std::type_info*> types = {
+					&typeid(int), &typeid(bool), &typeid(minecraft::varint), &typeid(minecraft::string), &typeid(minecraft::varint), 
+					&typeid(minecraft::varint), &typeid(minecraft::varint), &typeid(bool), &typeid(bool), &typeid(bool),
+					&typeid(minecraft::string), &typeid(minecraft::string), &typeid(long), &typeid(unsigned char), &typeid(char),
+					&typeid(bool), &typeid(bool), &typeid(bool), &typeid(minecraft::varint)
+				};
+				std::vector<std::any> values = {
+					0, false, (minecraft::varint){.num = 1}, (minecraft::string){.len = strlen("minecraft:overworld"), .string = "minecraft:overworld"},
+					(minecraft::varint){.num = 20}, (minecraft::varint){.num = (unsigned long)user.get_render_distance()}, (minecraft::varint){.num = (unsigned long)user.get_render_distance()},
+					false, true, false, (minecraft::string){.len = strlen("minecraft:overworld"), .string = "minecraft:overworld"},
+					(minecraft::string){.len = strlen("minecraft:overworld"), .string = "minecraft:overworld"}, (long)123456, (unsigned char)3, 
+					(char)-1, false, true, false, (minecraft::varint){.num = 0}
+				};
+				pkt_send(types, values, user, 0x29);
+				pkt_send(
+					{
+						&typeid(long long),
+						&typeid(float)
+					},
+					{
+						(long long)(htobe64((long long)(((0 & 0x3FFFFFF) << 38) | ((0 & 0x3FFFFFF) << 12) | (0 & 0xFFF)))),
+						(float)htobe32(0.0f)
+					},
+					user, 0x54
+				);
+				double x = 0;
+				double y = 0;
+				double z = 0;
+				pkt_send(
+					{
+						&typeid(unsigned long), &typeid(unsigned long), &typeid(unsigned long), &typeid(float), &typeid(float), &typeid(char), &typeid(minecraft::varint)
+					},
+					{
+						htobe64((*(uint64_t *)&x)), htobe64((*(uint64_t *)&y)), htobe64((*(uint64_t *)&z)), 0.0f, 0.0f, (char)0, (minecraft::varint){.num = 0}
+					},
+					user, 0x3E
+				);
+				pkt_send(
+					{
+						&typeid(unsigned char), &typeid(float)
+					},
+					{
+						(unsigned char)13, 0.0f
+					},
+					user, 0x20
+				);
+				float eventf = 0;
+				pkt_send(
+					{
+						&typeid(unsigned char), &typeid(unsigned int)
+					},
+					{
+						(unsigned char)3, htobe32((*(uint32_t *)&eventf))
+					},
+					user, 0x20
+				);
 				//game_event(13, 0.0f, user);
 				ret = 10;
 			}
@@ -255,68 +329,64 @@ int execute_pkt(packet p, int state, User &user, int index)
 	return ret;
 }
 
-void manage_client(std::stop_token stoken, int sock)
+void manage_client(int sock)
 {
-	int status = 0;
+	int rd_status = 0;
+	int size = 0;
+	int state = 0;
 	bool closed = false;
-	std::vector<packet> packets;
-	std::function<void(std::stop_token, std::vector<packet> &, int, bool *)> func = packet_reader;
-	manager.add_thread(func, sock, packets, &closed);
+	char *buffer = (char *)calloc(1025, sizeof(char));
+    char *pkt = (char *)calloc(1025, sizeof(char));
+	std::vector<packet> packets_to_process;
 	User user;
 	user.set_socket(sock);
 	int index = manager.get_current_index();
 	bool first = true;
 
-	while (1)
-	{
-		if (stoken.stop_requested())
-		{
-			log("stopped processing thread");
-			close(sock);
-			return;
-		}
-		if (packets.empty() && first == true)
-		{
-			std::this_thread::sleep_for(std::chrono::milliseconds(100));
-			if (closed == true && first == true)
+    while (1)
+    {
+        do
+        {
+            rd_status = recv(sock, buffer, 1024, 0);
+            if (rd_status == -1 || rd_status == 0)
+            {
+                close(sock);
+                return;
+            }
+            memcpy(&pkt[size], buffer, rd_status);
+            size += rd_status;
+        }
+        while (size < pkt[0]);
+        packets_to_process = process_packet(pkt);
+		memset(pkt, 0, 1025);
+		size = 0;
+        for (int i = 0; i < packets_to_process.size(); i++)
+        {
+			log("********************");
+			log("New packet");
+			log("Id: ", packets_to_process[i].id);
+			log("Size: ", packets_to_process[i].size);
+			log_header();
+			std::cout << "Data: ";
+			for (int x = 0; x < strlen(packets_to_process[i].data);x++)
 			{
-				manager.flag(index);
-				manager.flag(index - 1);
-				first = false;
-				log("stopped processing thread");
-				break;
+				if (isalnum(packets_to_process[i].data[x]))
+					printf("%c ", packets_to_process[i].data[x]);
+				else
+					printf("%02hhX ", (int)packets_to_process[i].data[x]);
 			}
-			continue;
-		}
-		if (packets.empty() && first == false)
-		{
-			continue;
-		}
-		log("New packet");
-		log("Id: ", packets.begin()->id);
-		log("Size: ", packets.begin()->size);
-		log_header();
-		std::cout << "Data: ";
-		for (int i = 0; i < strlen(packets.begin()->data);i++)
-		{
-			if (isalnum(packets.begin()->data[i]))
-				printf("%c ", packets.begin()->data[i]);
-			else
-				printf("%02hhX ", (int)packets.begin()->data[i]);
-		}
-		std::cout << "\n";
-		status = execute_pkt(packets[0], status, user, index);
-		log("New state: ", status);
-		free(packets.begin()->data);
-		packets.erase(packets.begin());
-	}
+			std::cout << "\n";
+			state = execute_pkt(packets_to_process[i], state, user, index);
+            free(packets_to_process[i].data);
+        }
+        packets_to_process.clear();
+    }
 }
 
 int main()
 {
 	
 	int sock = socket(AF_INET, SOCK_STREAM, 0);
-	fcntl(sock, F_SETFL, O_NONBLOCK);
 
 	if (std::filesystem::exists("server.properties") == false)
 	{
@@ -340,25 +410,17 @@ int main()
 		return -1;
 	}
 	log(std::format("Server listening to {}:{}", SV_IP, SV_PORT));
+	listen(sock, 32);
 	while (1)
 	{
-		if (manager.flag_size() > 0)
-		{
-			std::vector<int> flags = manager.get_flags();
-			for(int i = 0; i < flags.size(); i++)
-			{
-				manager.request_stop_thread(flags[i] - i);
-			}
-		}
 		int client_fd = 0;
-		listen(sock, 32);
 		client_fd = accept(sock, nullptr, nullptr);
 		if (client_fd < 0) 
 		{
 			std::this_thread::sleep_for(std::chrono::milliseconds(100));
 			continue;
 		}	
-		std::function<void(std::stop_token, int)> func = manage_client;
-		manager.add_thread(func, client_fd);
+		std::thread sv_th(manage_client, client_fd);
+		sv_th.detach();
 	}
 }

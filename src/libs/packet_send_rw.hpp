@@ -18,6 +18,10 @@ int calc_len(std::vector<const std::type_info*> types, std::vector<std::any> val
 		{
 			size += sizeof(int);
 		}
+		if (types[i]->hash_code() == typeid(unsigned int).hash_code())
+		{
+			size += sizeof(unsigned int);
+		}
 		else if (types[i]->hash_code() == typeid(char).hash_code())
 		{
 			size += sizeof(char);
@@ -33,6 +37,14 @@ int calc_len(std::vector<const std::type_info*> types, std::vector<std::any> val
 		else if (types[i]->hash_code() == typeid(long).hash_code())
 		{
 			size += sizeof(long);
+		}
+		else if (types[i]->hash_code() == typeid(unsigned long).hash_code())
+		{
+			size += sizeof(unsigned long);
+		}
+		else if (types[i]->hash_code() == typeid(long long).hash_code())
+		{
+			size += sizeof(long long);
 		}
 		else if (types[i]->hash_code() == typeid(short).hash_code())
 		{
@@ -57,7 +69,11 @@ int calc_len(std::vector<const std::type_info*> types, std::vector<std::any> val
 		else if (types[i]->hash_code() == typeid(minecraft::varint).hash_code())
 		{
 			size += 1;
-		}	
+		}
+		else if (types[i]->hash_code() == typeid(minecraft::uuid).hash_code())
+		{
+			size += 16;
+		}
 	}
 	return size;
 }
@@ -78,6 +94,11 @@ void pkt_send(std::vector<const std::type_info*> types, std::vector<std::any> va
 			int a = std::any_cast<int>(values[i]);
 			send(fd, &a, sizeof(int), 0);
 		}
+		if (types[i]->hash_code() == typeid(unsigned int).hash_code())
+		{
+			unsigned int a = std::any_cast<unsigned int>(values[i]);
+			send(fd, &a, sizeof(unsigned int), 0);
+		}
 		else if (types[i]->hash_code() == typeid(char).hash_code())
 		{
 			char a = std::any_cast<char>(values[i]);
@@ -90,13 +111,23 @@ void pkt_send(std::vector<const std::type_info*> types, std::vector<std::any> va
 		}
 		else if (types[i]->hash_code() == typeid(double).hash_code())
 		{
-			double a = std::any_cast<int>(values[i]);
-			send(fd, &a, sizeof(int), 0);
+			double a = std::any_cast<double>(values[i]);
+			send(fd, &a, sizeof(double), 0);
 		}
 		else if (types[i]->hash_code() == typeid(long).hash_code())
 		{
 			long a = std::any_cast<long>(values[i]);
 			send(fd, &a, sizeof(long), 0);
+		}
+		else if (types[i]->hash_code() == typeid(unsigned long).hash_code())
+		{
+			unsigned long a = std::any_cast<unsigned long>(values[i]);
+			send(fd, &a, sizeof(unsigned long), 0);
+		}
+		else if (types[i]->hash_code() == typeid(long long).hash_code())
+		{
+			long long a = std::any_cast<long long>(values[i]);
+			send(fd, &a, sizeof(long long), 0);
 		}
 		else if (types[i]->hash_code() == typeid(short).hash_code())
 		{
@@ -123,6 +154,11 @@ void pkt_send(std::vector<const std::type_info*> types, std::vector<std::any> va
 			struct minecraft::string str = std::any_cast<minecraft::string>(values[i]);
 			send_varint(fd, str.len);
 			send(fd, str.string.c_str(), str.string.length(), 0);
+		}
+		else if (types[i]->hash_code() == typeid(minecraft::uuid).hash_code())
+		{
+			struct minecraft::uuid str = std::any_cast<minecraft::uuid>(values[i]);
+			send(fd, str.data.c_str(), str.data.length(), 0);
 		}
 		else if (types[i]->hash_code() == typeid(minecraft::varint).hash_code())
 		{

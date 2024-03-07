@@ -5,8 +5,8 @@
 
 struct packet
 {
-	unsigned long id;
-	unsigned long size;
+	int id;
+	int size;
 	char *data;
 };
 
@@ -103,6 +103,11 @@ namespace minecraft
 	struct varint
 	{
 		unsigned long num;
+	};
+
+	struct uuid
+	{
+		std::string data;
 	};
 }
 
