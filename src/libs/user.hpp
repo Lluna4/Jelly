@@ -29,8 +29,8 @@ uuid gen_uuid()
 
 struct position
 {
-    double x, y, z = 0.0f;
-    float yaw, pitch = 0.0f;
+    double x, y, z;
+    float yaw, pitch;
 };
 
 class User
@@ -40,7 +40,7 @@ class User
         {
             UUIDv4::UUIDGenerator<std::mt19937_64> uuidGenerator;
             uuid = uuidGenerator.getUUID();
-            pos = {.x = 0.0f, .y = 0.0f, .z = 64.0f, .yaw = 0.0f, .pitch = 0.0f};
+            pos = {.x = 0.0f, .y = 1000.0f, .z = 64.0f, .yaw = 0.0f, .pitch = 0.0f};
         }
 
         User(std::string uname, int socket)
@@ -48,7 +48,7 @@ class User
         {
             UUIDv4::UUIDGenerator<std::mt19937_64> uuidGenerator;
             uuid = uuidGenerator.getUUID();
-            pos = {.x = 0.0f, .y = 0.0f, .z = 64.0f, .yaw = 0.0f, .pitch = 0.0f};
+            pos = {.x = 0.0f, .y = 1000.0f, .z = 64.0f, .yaw = 0.0f, .pitch = 0.0f};
         }
 
         UUIDv4::UUID get_uuid()
