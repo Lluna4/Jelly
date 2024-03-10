@@ -236,7 +236,35 @@ int execute_pkt(packet p, int state, User &user)
 				log("login awknoleged by the client");
 				ret = 4;
 			}
-
+		case 0x17:
+			if (state == 10)
+			{
+				char buffer[9] = {0};
+				int sock = socket(AF_INET, SOCK_STREAM, 0);
+				sockaddr addr ={
+					AF_INET,
+					htons(8080),
+					inet_addr("172.28.26.62")
+				};
+				int conn = connect(sock, (struct sockaddr*)&addr, sizeof(addr));
+				char *ptr = p.data;
+				position pos = user.get_position();
+				send(sock, p.data, sizeof(double), 0);
+				read(sock, buffer, sizeof(double));
+				pos.x = read_double(buffer);
+				ptr = ptr + sizeof(double);
+				send(sock, p.data, sizeof(double), 0);
+				read(sock, buffer, sizeof(double));
+				pos.y = read_double(buffer);
+				ptr = ptr + sizeof(double);
+				send(sock, p.data, sizeof(double), 0);
+				read(sock, buffer, sizeof(double));
+				pos.z = read_double(buffer);
+				user.update_position(pos);
+				log_header();
+				std::cout << "New pos: x: " << pos.x << " y: " << pos.y << " z: " << pos.z << std::endl;
+			}
+			
 	}
 	return ret;
 }

@@ -78,6 +78,11 @@ class User
             return render_distance;
         }
 
+        void update_position(position p)
+        {
+            pos = p;
+        }
+
         struct position get_position()
         {
             return pos;

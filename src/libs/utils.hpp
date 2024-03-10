@@ -83,6 +83,13 @@ std::string read_string(char *str)
 	return dest;
 }
 
+double read_double(char *buf)
+{
+	double num = 0.0f;
+	memcpy(&num, buf, sizeof(double));
+	return num;
+}
+
 std::string forge_packet(packet pkt)
 {
 	std::string ret;
