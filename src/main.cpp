@@ -239,30 +239,28 @@ int execute_pkt(packet p, int state, User &user)
 		case 0x17:
 			if (state == 10)
 			{
-				char buffer[9] = {0};
-				int sock = socket(AF_INET, SOCK_STREAM, 0);
-				sockaddr addr ={
-					AF_INET,
-					htons(8080),
-					inet_addr("172.28.26.62")
-				};
-				int conn = connect(sock, (struct sockaddr*)&addr, sizeof(addr));
 				char *ptr = p.data;
 				position pos = user.get_position();
-				send(sock, p.data, sizeof(double), 0);
-				read(sock, buffer, sizeof(double));
-				pos.x = read_double(buffer);
+				pos.x = read_double(ptr);
 				ptr = ptr + sizeof(double);
-				send(sock, p.data, sizeof(double), 0);
-				read(sock, buffer, sizeof(double));
-				pos.y = read_double(buffer);
+				pos.y = read_double(ptr);
 				ptr = ptr + sizeof(double);
-				send(sock, p.data, sizeof(double), 0);
-				read(sock, buffer, sizeof(double));
-				pos.z = read_double(buffer);
+				pos.z = read_double(ptr);
 				user.update_position(pos);
 				log_header();
 				std::cout << "New pos: x: " << pos.x << " y: " << pos.y << " z: " << pos.z << std::endl;
+				if (pos.y <= 500.0f)
+				{
+					pkt_send(
+						{
+							&typeid(double), &typeid(double), &typeid(double), &typeid(float), &typeid(float), &typeid(char), &typeid(minecraft::varint)
+						},
+						{
+							(double)0.0f, (double)1000.0f, pos.z, 0.0f, 0.0f, (char)0, (minecraft::varint){.num = 0}
+						},
+						user, 0x3E
+					);
+				}
 			}
 			
 	}
@@ -271,6 +269,10 @@ int execute_pkt(packet p, int state, User &user)
 
 void manage_client(int sock)
 {
+	using std::chrono::high_resolution_clock;
+	using std::chrono::duration_cast;
+	using std::chrono::duration;
+	using std::chrono::milliseconds;
 	int rd_status = 0;
 	int size = 0;
 	int state = 0;
@@ -297,11 +299,11 @@ void manage_client(int sock)
             }
             memcpy(&pkt[size], buffer, rd_status);
             size += rd_status;
+			log((int)pkt[0]);
         }
         while (size < pkt[0]);
+		auto t1 = high_resolution_clock::now();
         packets_to_process = process_packet(pkt);
-		memset(pkt, 0, 1025);
-		size = 0;
         for (int i = 0; i < packets_to_process.size(); i++)
         {
 			log("********************");
@@ -310,7 +312,7 @@ void manage_client(int sock)
 			log("Size: ", packets_to_process[i].size);
 			log_header();
 			std::cout << "Data: ";
-			for (int x = 0; x < strlen(packets_to_process[i].data);x++)
+			for (int x = 0; x < packets_to_process[i].size; x++)
 			{
 				if (isalnum(packets_to_process[i].data[x]))
 					printf("%c ", packets_to_process[i].data[x]);
@@ -321,7 +323,18 @@ void manage_client(int sock)
 			state = execute_pkt(packets_to_process[i], state, user);
             free(packets_to_process[i].data);
         }
+		auto t2 = high_resolution_clock::now();
+		auto ms_int = duration_cast<milliseconds>(t2 - t1);
+
+		/* Getting number of milliseconds as a double. */
+		duration<double, std::milli> ms_double = t2 - t1;
+		log_header();
+		std::cout << "Time to process: ";
+		std::cout << ms_double.count() << "ms\n";
         packets_to_process.clear();
+		memset(buffer, 0, 1025);
+		memset(pkt, 0, 1025);
+		size = 0;
     }
 	close(sock);
 }

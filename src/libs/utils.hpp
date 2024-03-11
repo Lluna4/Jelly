@@ -85,9 +85,35 @@ std::string read_string(char *str)
 
 double read_double(char *buf)
 {
-	double num = 0.0f;
-	memcpy(&num, buf, sizeof(double));
-	return num;
+    uint64_t num_as_uint64;
+    double num;
+	
+    memcpy(&num_as_uint64, buf, sizeof(uint64_t));
+    num_as_uint64 = be64toh(num_as_uint64);
+    memcpy(&num, &num_as_uint64, sizeof(double));
+
+    return num;
+}
+
+char *mem_dup(char *buf, int size)
+{
+	char *ret = (char *)calloc(size, sizeof(char));
+	memcpy(ret, buf, (size - 1));
+	return ret;
+}
+
+char	*ft_strdup(const char *s1)
+
+{
+	int		n;
+	char	*ret;
+
+	n = strlen(s1);
+	ret = (char *)malloc((n + 1) * sizeof(char));
+	if (!ret)
+		return (0);
+	ret = (char *)memcpy(ret, s1, n + 1);
+	return (ret);
 }
 
 std::string forge_packet(packet pkt)

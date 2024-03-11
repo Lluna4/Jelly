@@ -13,8 +13,6 @@
 #include <cstring>
 #include <stdlib.h>
 
-
-
 std::vector<packet> process_packet(char *pkt)
 {
 	int lenght = 0;
@@ -27,14 +25,14 @@ std::vector<packet> process_packet(char *pkt)
 	{
 		if (*pkt == '\0')
 			break;
-        p.size = pkt[0];
+        p.size = *pkt;
 		next = pkt + (p.size + 1);
 		pkt++;
         p.id = *pkt;
 		data = (char *)calloc(p.size, sizeof(char));
 		pkt++;
 		std::memcpy(data, pkt, p.size - 1);
-		p.data = strdup(data);
+		p.data = mem_dup(data, p.size);
 		free(data);
 		pkt = next;
 		packets.push_back(p);
