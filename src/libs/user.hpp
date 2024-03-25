@@ -42,6 +42,7 @@ class User
             uuid = uuidGenerator.getUUID();
             pos = {.x = 0.0f, .y = 1000.0f, .z = 64.0f, .yaw = 0.0f, .pitch = 0.0f};
             pronouns = "they/them";
+            state = 0;
         }
 
         User(std::string uname, int socket)
@@ -51,6 +52,7 @@ class User
             uuid = uuidGenerator.getUUID();
             pos = {.x = 0.0f, .y = 1000.0f, .z = 64.0f, .yaw = 0.0f, .pitch = 0.0f};
             pronouns = "they/them";
+            state = 0;
         }
 
         UUIDv4::UUID get_uuid()
@@ -62,7 +64,10 @@ class User
         {
             return uname_;
         }
-
+        int get_state()
+        {
+            return state;
+        }
         int get_socket()
         {
             return socket_;
@@ -123,6 +128,11 @@ class User
             pronouns = pron;
         }
 
+        void set_state(int stat)
+        {
+            state = stat;
+        }
+
     private:
         UUIDv4::UUID uuid;
         std::string uname_;
@@ -131,4 +141,5 @@ class User
 	    int render_distance;
         struct position pos;
         std::string pronouns;
+        int state;
 };

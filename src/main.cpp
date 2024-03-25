@@ -9,7 +9,10 @@
 #include "libs/packet_send.hpp"
 #include <vector>
 #include <typeinfo>
+#include <format>
 #include <nlohmann/json.hpp>
+#include "libs/test_epoll.hpp"
+#include <sys/epoll.h>
 #if defined(__linux__)
 #  include <endian.h>
 #elif defined(__FreeBSD__) || defined(__NetBSD__)
@@ -23,6 +26,9 @@
 
 using json = nlohmann::json;
 int connected = 0;
+int epfd = 0;
+
+std::vector<User> users;
 
 
 void login_succ(User user)
@@ -92,7 +98,7 @@ void status_response(User user)
 		user, 0x00);
 }
 
-int execute_pkt(packet p, int state, User &user)
+int execute_pkt(packet p, int state, User &user, int index)
 {
 	int ret = state;
 	unsigned long size = 0;
@@ -115,7 +121,7 @@ int execute_pkt(packet p, int state, User &user)
 					log_err("Invalid username size!");
 				uname = p.data;
 				uname = uname.substr(1, size);
-				user.set_uname(uname);
+				users[index].set_uname(uname);
 				connected++;
 				pkt_send(
 					{
@@ -135,8 +141,8 @@ int execute_pkt(packet p, int state, User &user)
 			else if (state == 4)
 			{
 				buf2 = read_string(p.data, buf);
-				user.set_locale(buf);
-				user.set_render_distance((int)p.data[buf2 + 1]);
+				users[index].set_locale(buf);
+				users[index].set_render_distance((int)p.data[buf2 + 1]);
 				log("New locale: ", user.get_locale());
 				log("New render distance: ", user.get_render_distance());
 				registry_data(user);
@@ -159,7 +165,15 @@ int execute_pkt(packet p, int state, User &user)
 				send(user.get_socket(), (char *)(&p.size), sizeof(char), 0);
 				send(user.get_socket(), (char *)(&p.id), sizeof(char), 0);
 				send(user.get_socket(), p.data, sizeof(long), 0);
+				close(user.get_socket());
+				remove_from_list(user.get_socket(), epfd);
+				for (int i = 0; i < users.size(); i++)
+				{
+					if (users[i].get_socket() == user.get_socket())
+						users.erase(users.begin() + i);
+				}
 			}
+			break;
 		case 2:
 			if (state == 5)
 			{
@@ -186,8 +200,8 @@ int execute_pkt(packet p, int state, User &user)
 					(minecraft::string){.len = strlen("minecraft:overworld"), .string = "minecraft:overworld"}, (long)123456, (unsigned char)3, 
 					(char)-1, false, true, false, (minecraft::varint){.num = 0}
 				};
-				position pos = user.get_position();
 				pkt_send(types, values, user, 0x29);
+				position pos = user.get_position();
 				pkt_send(
 					{
 						&typeid(long long),
@@ -218,6 +232,7 @@ int execute_pkt(packet p, int state, User &user)
 					user, 0x20
 				);
 				float eventf = 0;
+				size = size - 2;
 				pkt_send(
 					{
 						&typeid(unsigned char), &typeid(float)
@@ -230,12 +245,14 @@ int execute_pkt(packet p, int state, User &user)
 				//game_event(13, 0.0f, user);
 				ret = 10;
 			}
+			break;
 		case 3:
 			if (state == 3)
 			{
 				log("login awknoleged by the client");
 				ret = 4;
 			}
+			break;
 		case 0x17:
 			if (state == 10)
 			{
@@ -246,9 +263,11 @@ int execute_pkt(packet p, int state, User &user)
 				pos.y = read_double(ptr);
 				ptr = ptr + sizeof(double);
 				pos.z = read_double(ptr);
-				user.update_position(pos);
+				pos.yaw = pos.yaw;
+				pos.pitch = pos.pitch;
+				users[index].update_position(pos);
 				log_header();
-				std::cout << "New pos: x: " << pos.x << " y: " << pos.y << " z: " << pos.z << std::endl;
+				std::cout << "New pos: x: " << pos.x << " y: " << pos.y << " z: " << pos.z << " yaw: " << pos.yaw << " pitch: " << pos.pitch << std::endl;
 				if (pos.y <= 500.0f)
 				{
 					pkt_send(
@@ -256,18 +275,49 @@ int execute_pkt(packet p, int state, User &user)
 							&typeid(double), &typeid(double), &typeid(double), &typeid(float), &typeid(float), &typeid(char), &typeid(minecraft::varint)
 						},
 						{
-							(double)0.0f, (double)1000.0f, pos.z, 0.0f, 0.0f, (char)0, (minecraft::varint){.num = 0}
+							pos.x, (double)1000.0f, pos.z, pos.yaw, pos.pitch, (char)0, (minecraft::varint){.num = 0}
 						},
 						user, 0x3E
 					);
 				}
 			}
-			
+			break;
+		case 0x18:
+			if (state == 10)
+			{
+				char *ptr = p.data;
+				position pos = user.get_position();
+				pos.x = read_double(ptr);
+				ptr = ptr + sizeof(double);
+				pos.y = read_double(ptr);
+				ptr = ptr + sizeof(double);
+				pos.z = read_double(ptr);
+				ptr = ptr + sizeof(double);
+				pos.yaw = read_float(ptr);
+				ptr = ptr + sizeof(float);
+				pos.pitch = read_float(ptr);
+				users[index].update_position(pos);
+				log_header();
+				std::cout << "New pos2: x: " << pos.x << " y: " << pos.y << " z: " << pos.z << " yaw: " << pos.yaw << " pitch: " << pos.pitch << std::endl;
+				if (pos.y <= 500.0f)
+				{
+					pkt_send(
+						{
+							&typeid(double), &typeid(double), &typeid(double), &typeid(float), &typeid(float), &typeid(char), &typeid(minecraft::varint)
+						},
+						{
+							pos.x, (double)1000.0f, pos.z, pos.yaw, pos.pitch, (char)0, (minecraft::varint){.num = 0}
+						},
+						user, 0x3E
+					);
+				}
+			}
+			break;
 	}
 	return ret;
 }
 
-void manage_client(int sock)
+/*void manage_client(int sock)
 {
 	using std::chrono::high_resolution_clock;
 	using std::chrono::duration_cast;
@@ -281,27 +331,28 @@ void manage_client(int sock)
     char *pkt = (char *)calloc(1025, sizeof(char));
 	std::vector<packet> packets_to_process;
 	User user;
+	//users.push_back(user);
 	user.set_socket(sock);
 	bool first = true;
 
     while (1)
     {
-        do
-        {
-            rd_status = recv(sock, buffer, 1024, 0);
-            if (rd_status == -1 || rd_status == 0)
-            {
-                close(sock);
-				if (connected > 0)
-					connected--;
-				log("Thread closed");
-                return;
-            }
-            memcpy(&pkt[size], buffer, rd_status);
-            size += rd_status;
-			log((int)pkt[0]);
-        }
-        while (size < pkt[0]);
+	do
+	{
+		rd_status = recv(sock, buffer, 1024, 0);
+		if (rd_status == -1 || rd_status == 0)
+		{
+			close(sock);
+			if (connected > 0)
+				connected--;
+			log("Thread closed");
+			return;
+		}
+		memcpy(&pkt[size], buffer, rd_status);
+		size += rd_status;
+		log((int)pkt[0]);
+	}
+	while (size < pkt[0]);
 		auto t1 = high_resolution_clock::now();
         packets_to_process = process_packet(pkt);
         for (int i = 0; i < packets_to_process.size(); i++)
@@ -327,7 +378,7 @@ void manage_client(int sock)
 		auto ms_int = duration_cast<milliseconds>(t2 - t1);
 
 		/* Getting number of milliseconds as a double. */
-		duration<double, std::milli> ms_double = t2 - t1;
+		/*duration<double, std::milli> ms_double = t2 - t1;
 		log_header();
 		std::cout << "Time to process: ";
 		std::cout << ms_double.count() << "ms\n";
@@ -337,11 +388,84 @@ void manage_client(int sock)
 		size = 0;
     }
 	close(sock);
+}*/
+
+void read_ev(char *pkt, int sock)
+{
+	using std::chrono::high_resolution_clock;
+	using std::chrono::duration_cast;
+	using std::chrono::duration;
+	using std::chrono::milliseconds;
+	std::vector<packet> packets_to_process;
+	User user;
+	int index = 0;
+	auto t1 = high_resolution_clock::now();
+	packets_to_process = process_packet(pkt);
+	for (int i = 0; i < users.size(); i++) 
+	{ 
+		if (sock == users[i].get_socket()) { //broken af
+			user = users[i];
+			index = i;
+			break; 
+		}
+	}
+	int state = user.get_state();
+	log(state);
+	log(index);
+	log(users.size());
+	for (int i = 0; i < packets_to_process.size(); i++)
+	{
+		log("********************");
+		log("New packet");
+		log("Id: ", packets_to_process[i].id);
+		log("Size: ", packets_to_process[i].size);
+		log_header();
+		std::cout << "Data: ";
+		for (int x = 0; x < packets_to_process[i].size; x++)
+		{
+			if (isalnum(packets_to_process[i].data[x]))
+				printf("%c ", packets_to_process[i].data[x]);
+			else
+				printf("%02hhX ", (int)packets_to_process[i].data[x]);
+		}
+		std::cout << "\n";
+		state = execute_pkt(packets_to_process[i], state, user, index);
+		log(state);
+		users[index].set_state(state);
+		free(packets_to_process[i].data);
+	}
+	auto t2 = high_resolution_clock::now();
+	auto ms_int = duration_cast<milliseconds>(t2 - t1);
+
+	/* Getting number of milliseconds as a double. */
+	duration<double, std::milli> ms_double = t2 - t1;
+	log_header();
+	std::cout << "Time to process: ";
+	std::cout << ms_double.count() << "ms\n";
+	packets_to_process.clear();
+}
+
+void read_loop(int epfd)
+{
+	struct epoll_event events[MAX_EVENTS];
+    int events_ready = 0;
+	char buff[1025] = {0};
+	int rd_status = 0;
+    while (true)
+    {
+        events_ready = epoll_wait(epfd, events, MAX_EVENTS, -1);
+		for (int i = 0; i < events_ready; i++)
+		{
+			rd_status = recv(events[i].data.fd, buff, 1024, 0);
+			read_ev(buff, events[i].data.fd);
+			memset(buff, 0, 1024);
+		}
+    }
 }
 
 int main()
 {
-	
+	int epfd = create_instance();
 	int sock = socket(AF_INET, SOCK_STREAM, 0);
 
 	if (std::filesystem::exists("server.properties") == false)
@@ -367,16 +491,15 @@ int main()
 	}
 	log(std::format("Server listening to {}:{}", SV_IP, SV_PORT));
 	listen(sock, 32);
+	std::thread read_l(read_loop, epfd);
+	read_l.detach();
 	while (1)
 	{
 		int client_fd = 0;
 		client_fd = accept(sock, nullptr, nullptr);
-		if (client_fd < 0) 
-		{
-			std::this_thread::sleep_for(std::chrono::milliseconds(100));
-			continue;
-		}
-		std::thread sv_th(manage_client, client_fd);
-		sv_th.detach();
+		User user;
+		user.set_socket(client_fd);
+		users.push_back(user);
+		add_to_list(client_fd, epfd);
 	}
 }

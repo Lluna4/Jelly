@@ -66,6 +66,10 @@ int calc_len(std::vector<const std::type_info*> types, std::vector<std::any> val
 		{
 			size += std::any_cast<minecraft::string>(values[i]).len + 1;
 		}
+		else if (types[i]->hash_code() == typeid(minecraft::string_tag).hash_code())
+		{
+			size += std::any_cast<minecraft::string_tag>(values[i]).len + 4;
+		}
 		else if (types[i]->hash_code() == typeid(minecraft::varint).hash_code())
 		{
 			size += 1;
@@ -78,15 +82,20 @@ int calc_len(std::vector<const std::type_info*> types, std::vector<std::any> val
 	return size;
 }
 
-void pkt_send(std::vector<const std::type_info*> types, std::vector<std::any> values, User user, int id)
+void pkt_send(std::vector<const std::type_info*> types, std::vector<std::any> values, User user, int id, bool headless = false)
 {
 	std::string a;
 	std::string buf;
 	int fd = user.get_socket();
-	int size = calc_len(types, values) + 1;
+	int size = 0;
+	if (headless)
+		size = calc_len(types, values);
+	else
+		size = calc_len(types, values) + 1;
 	std::cout << size << std::endl;
-	send_varint(fd, size);
-	send_varint(fd, id);
+	if (headless == false)
+		send_varint(fd, size);
+		send_varint(fd, id);
 	for (int i = 0; i < types.size(); i++)
 	{
 		if (types[i]->hash_code() == typeid(int).hash_code())
@@ -156,6 +165,26 @@ void pkt_send(std::vector<const std::type_info*> types, std::vector<std::any> va
 			struct minecraft::string str = std::any_cast<minecraft::string>(values[i]);
 			send_varint(fd, str.len);
 			send(fd, str.string.c_str(), str.string.length(), 0);
+		}
+		else if (types[i]->hash_code() == typeid(minecraft::string_tag).hash_code())
+		{
+			struct minecraft::string_tag str = std::any_cast<minecraft::string_tag>(values[i]);
+			std::string buf;
+			char id = 0x08;
+			char comp = 0x0a;
+			std::string text = "text";
+			short lenght = 4;
+			char zero = 0;
+			short len = str.len;
+			short len2 = lenght;
+			lenght = htobe16(*(uint16_t*)&lenght);
+			str.len = htobe16(*(uint16_t*)&str.len);
+			
+			send(fd, &comp, sizeof(char), 0);
+			send(fd, &id, sizeof(char), 0);
+			send(fd, &str.len, sizeof(short), 0);
+			send(fd, str.string.c_str(), len, 0);
+			send(fd, &zero, sizeof(char), 0);
 		}
 		else if (types[i]->hash_code() == typeid(minecraft::uuid).hash_code())
 		{
