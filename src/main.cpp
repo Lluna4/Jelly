@@ -456,7 +456,19 @@ void read_loop(int epfd)
         events_ready = epoll_wait(epfd, events, MAX_EVENTS, -1);
 		for (int i = 0; i < events_ready; i++)
 		{
+
 			rd_status = recv(events[i].data.fd, buff, 1024, 0);
+			if (rd_status == -1 || rd_status == 0)
+			{
+				close(events[i].data.fd);
+				remove_from_list(events[i].data.fd, epfd);
+				for (int i = 0; i < users.size(); i++)
+				{
+					if (users[i].get_socket() == events[i].data.fd)
+						users.erase(users.begin() + i);
+				}
+				connected--;
+			}
 			read_ev(buff, events[i].data.fd);
 			memset(buff, 0, 1024);
 		}
