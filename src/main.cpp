@@ -30,6 +30,23 @@ int epfd = 0;
 
 std::vector<User> users;
 
+void send_tab()
+{
+	std::vector<const std::type_info *> types = {&typeid(char), &typeid(minecraft::varint)};
+	std::vector<std::any> values = {(char)(0x01 | 0x08 | 0x20), (minecraft::varint){.num = (unsigned long)connected}};
+	for (int i = 0; i < users.size(); i++)
+	{
+		std::string formatted_name = std::format("{} [{}]", users[i].get_uname() ,users[i].get_pronouns());
+		std::vector<const std::type_info *> buf = {&typeid(minecraft::uuid), &typeid(minecraft::string), &typeid(minecraft::varint), &typeid(bool),&typeid(bool), &typeid(minecraft::string_tag)};
+		std::vector<std::any> val = {(minecraft::uuid){.data = users[i].get_uuid().bytes()},(minecraft::string){.len = users[i].get_uname().length(), .string = users[i].get_uname()}, (minecraft::varint){.num = 0}, true, true,(minecraft::string_tag){.len = (short)formatted_name.length(), .string = formatted_name}};
+		types.insert(types.end(), buf.begin(), buf.end());
+		values.insert(values.end(), val.begin(), val.end());
+	}
+	for (int i = 0; i < users.size(); i++)
+	{
+		pkt_send(types, values, users[i], 0x3C);
+	}
+}
 
 void login_succ(User user)
 {
@@ -242,6 +259,7 @@ int execute_pkt(packet p, int state, User &user, int index)
 					},
 					user, 0x20
 				);
+				send_tab();
 				//game_event(13, 0.0f, user);
 				ret = 10;
 			}
@@ -442,7 +460,6 @@ void read_ev(char *pkt, int sock)
 	log_header();
 	std::cout << "Time to process: ";
 	std::cout << ms_double.count() << "ms\n";
-	packets_to_process.clear();
 }
 
 void read_loop(int epfd)
