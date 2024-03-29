@@ -115,6 +115,25 @@ void status_response(User user)
 		user, 0x00);
 }
 
+void send_chat(std::string contents, std::string sender)
+{	
+	short lenght1 = (short)contents.length(), length2 = (short)sender.length();
+	for (int i = 0; i < users.size(); i++)
+	{
+		pkt_send({
+			&typeid(minecraft::string_tag), &typeid(minecraft::varint), 
+			&typeid(minecraft::string_tag),
+			&typeid(bool)
+		},
+		{
+			(minecraft::string_tag){.len = lenght1, .string = contents},
+			(minecraft::varint){.num = 0},
+			(minecraft::string_tag){.len = length2, .string = sender},
+			false
+		}, users[i], 0x1C);
+	}
+}
+
 int execute_pkt(packet p, int state, User &user, int index)
 {
 	int ret = state;
@@ -269,6 +288,29 @@ int execute_pkt(packet p, int state, User &user, int index)
 			{
 				log("login awknoleged by the client");
 				ret = 4;
+			}
+			break;
+		case 0x04:
+			if (state == 10)
+			{
+				std::string command = read_string(p.data);
+				std::string command_contents;
+				log("Command: ", command);
+				if (command.starts_with("pronouns"))
+				{
+					command_contents = command.substr(command.find(' ') + 1);
+					users[index].set_pronouns(command_contents);
+					send_tab();
+					send_chat("Changed pronouns", "SERVER");
+				}
+			}
+			break;
+		case 0x05:
+			if (state == 10)
+			{
+				std::string message = read_string(p.data);
+				std::string sender = std::format("{} [{}]", users[index].get_uname(), users[index].get_pronouns());
+				send_chat(message, sender);
 			}
 			break;
 		case 0x17:
@@ -485,6 +527,7 @@ void read_loop(int epfd)
 						users.erase(users.begin() + i);
 				}
 				connected--;
+				send_tab();
 			}
 			read_ev(buff, events[i].data.fd);
 			memset(buff, 0, 1024);
