@@ -313,6 +313,31 @@ int execute_pkt(packet p, int state, User &user, int index)
 				send_chat(message, sender);
 			}
 			break;
+		case 0x0A:
+			if (state == 10)
+			{
+				minecraft::varint id = minecraft::read_varint(p.data);
+				p.data++;
+				std::string command = read_string(p.data);
+				if (std::string("pronouns").starts_with(command))
+				{
+					pkt_send(
+					    {
+						&typeid(minecraft::varint), &typeid(minecraft::varint),
+						&typeid(minecraft::varint), &typeid(minecraft::varint),
+						&typeid(minecraft::string), &typeid(bool)
+					    },
+					    {
+						id, (minecraft::varint){.num = 0},
+						(minecraft::varint){.num = std::string("pronouns").length()},
+						(minecraft::varint){.num = 1},
+						(minecraft::string){.len = std::string("pronouns").length(),
+						.string = std::string("pronouns")}, false
+
+				            }, users[index], 0x10
+                                        );
+				}
+			}
 		case 0x17:
 			if (state == 10)
 			{
