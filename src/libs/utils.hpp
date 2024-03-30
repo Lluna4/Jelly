@@ -159,6 +159,14 @@ namespace minecraft
 		short len;
 		std::string string;
 	};
+
+	struct varint read_varint(char *buf)
+	{
+		unsigned long ret = 0;
+
+		ReadUleb128(buf, &ret);
+		return (varint){.num = ret};
+	}
 }
 
 void send_varint(int fd, unsigned long val)
