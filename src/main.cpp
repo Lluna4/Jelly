@@ -30,6 +30,25 @@ int epfd = 0;
 
 std::vector<User> users;
 
+void commands(User user)
+{
+	std::string pron = "pronouns";
+	pkt_send(
+		{
+			&typeid(minecraft::varint), &typeid(char), &typeid(minecraft::varint), &typeid(minecraft::varint),
+			&typeid(minecraft::varint), &typeid(char), &typeid(minecraft::varint),
+			&typeid(minecraft::string), &typeid(minecraft::varint)
+		},
+		{
+			(minecraft::varint){.num = 3}, (char)0x00, (minecraft::varint){.num = 2}, (minecraft::varint){.num = 1},
+			(minecraft::varint){.num = 2},
+			(char)(0x01 | 0x04), (minecraft::varint){.num = 0},
+			(minecraft::string){.len = pron.length(), .string = pron},  
+			(minecraft::varint){.num = 0}
+		}, user, 0x11
+        );
+}
+
 void send_tab()
 {
 	std::vector<const std::type_info *> types = {&typeid(char), &typeid(minecraft::varint)};
@@ -279,6 +298,7 @@ int execute_pkt(packet p, int state, User &user, int index)
 					user, 0x20
 				);
 				send_tab();
+				commands(users[index]);
 				//game_event(13, 0.0f, user);
 				ret = 10;
 			}
