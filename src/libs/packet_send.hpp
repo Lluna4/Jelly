@@ -78,6 +78,20 @@ int calc_len(std::vector<const std::type_info*> types, std::vector<std::any> val
 		{
 			size += 16;
 		}
+		else if (types[i]->hash_code() == typeid(minecraft::node_root).hash_code())
+		{
+			size += sizeof(char) * 2 + std::any_cast<minecraft::node_root>(values[i]).children_index.size(); 
+		}
+		else if (types[i]->hash_code() == typeid(minecraft::node_literal).hash_code())
+		{
+			minecraft::node_literal root = std::any_cast<minecraft::node_literal>(values[i]); 
+			size += sizeof(char) * 2 + root.children_index.size() + root.name.len; 
+		}
+		else if (types[i]->hash_code() == typeid(minecraft::node_argument).hash_code())
+		{
+			minecraft::node_argument root = std::any_cast<minecraft::node_argument>(values[i]); 
+			size += sizeof(char) * 4 + root.children_index.size() + root.name.len; 
+		}
 	}
 	return size;
 }
@@ -197,6 +211,42 @@ void pkt_send(std::vector<const std::type_info*> types, std::vector<std::any> va
 		{
 			minecraft::varint a = std::any_cast<minecraft::varint>(values[i]);
 			send_varint(fd, a.num);
-		}	
+		}
+		else if (types[i]->hash_code() == typeid(minecraft::node_root).hash_code())
+		{
+			minecraft::node_root root = std::any_cast<minecraft::node_root>(values[i]); 
+			send(fd, &root.flag, sizeof(char), 0);
+			send(fd, &root.children_num.num, sizeof(char), 0);
+			for (int i = 0; i < root.children_index.size(); i++)
+			{
+				send(fd, &root.children_index[i].num, sizeof(char), 0);
+			}
+		}
+		else if (types[i]->hash_code() == typeid(minecraft::node_literal).hash_code())
+		{
+			minecraft::node_literal root = std::any_cast<minecraft::node_literal>(values[i]); 
+			send(fd, &root.flag, sizeof(char), 0);
+			send_varint(fd, root.children_num.num);
+			for (int i = 0; i < root.children_index.size(); i++)
+			{
+				send_varint(fd, root.children_index[i].num);
+			}
+			send_varint(fd, root.name.len);
+			send(fd, root.name.string.c_str(), root.name.len, 0);
+		}
+		else if (types[i]->hash_code() == typeid(minecraft::node_argument).hash_code())
+		{
+			minecraft::node_argument root = std::any_cast<minecraft::node_argument>(values[i]); 
+			send(fd, &root.flag, sizeof(char), 0);
+			send_varint(fd, root.children_num.num);
+			for (int i = 0; i < root.children_index.size(); i++)
+			{
+				send_varint(fd, root.children_index[i].num);
+			}
+			send_varint(fd, root.name.len);
+			send(fd, root.name.string.c_str(), root.name.len, 0);
+			send_varint(fd, root.parser_id.num);
+			send_varint(fd, root.varies.num);
+		}
 	}
 }

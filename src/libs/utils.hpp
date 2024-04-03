@@ -2,6 +2,7 @@
 #include <iostream>
 #include <string.h>
 #include <sys/socket.h>
+#include <vector>
 
 struct packet
 {
@@ -167,6 +168,31 @@ namespace minecraft
 		ReadUleb128(buf, &ret);
 		return (varint){.num = ret};
 	}
+
+	struct node_root
+	{
+		char flag = 0x00;
+		varint children_num;
+		std::vector<varint> children_index;
+	};
+
+	struct node_literal
+	{
+		char flag = 0x01;
+		varint children_num;
+		std::vector<varint> children_index;
+		string name;
+	};
+
+	struct node_argument
+	{
+		char flag = 0x01;
+		varint children_num;
+		std::vector<varint> children_index;
+		string name;
+		varint parser_id;
+		varint varies;
+	};
 }
 
 void send_varint(int fd, unsigned long val)
