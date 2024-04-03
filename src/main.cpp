@@ -32,21 +32,26 @@ std::vector<User> users;
 
 void commands(User user)
 {
+	//only /pronoun command
 	std::string pron = "pronouns";
+	minecraft::node_root root_node = {.children_num = {.num = 2}, 
+		.children_index = {(minecraft::varint){.num = 1}, (minecraft::varint){.num = 2}}};
+	
+	minecraft::node_literal pron_command = {.children_num = {.num = 1},
+		.children_index = {(minecraft::varint){.num = 2}},
+		.name = {.len = pron.length(), .string = pron}};
+
+	minecraft::node_argument args = {.children_num = 0, .name {.len = pron.length(), .string = pron},
+	.parser_id = {.num = 5}, .varies = {.num = 0} };
+	
 	pkt_send(
-		{
-			&typeid(minecraft::varint), &typeid(char), &typeid(minecraft::varint), &typeid(minecraft::varint),
-			&typeid(minecraft::varint), &typeid(char), &typeid(minecraft::varint),
-			&typeid(minecraft::string), &typeid(minecraft::varint)
+	    	{
+			&typeid(minecraft::varint), &typeid(minecraft::node_root), &typeid(minecraft::node_literal),
+			&typeid(minecraft::node_argument), &typeid(minecraft::varint)
 		},
 		{
-			(minecraft::varint){.num = 3}, (char)0x00, (minecraft::varint){.num = 2}, (minecraft::varint){.num = 1},
-			(minecraft::varint){.num = 2},
-			(char)(0x01 | 0x04), (minecraft::varint){.num = 0},
-			(minecraft::string){.len = pron.length(), .string = pron},  
-			(minecraft::varint){.num = 0}
-		}, user, 0x11
-        );
+			(minecraft::varint){.num = 3}, root_node, pron_command, args, (minecraft::varint){.num = 0}
+		}, user, 0x11);
 }
 
 void send_tab()
