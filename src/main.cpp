@@ -34,18 +34,18 @@ void commands(User user)
 {
 	//only /pronoun command
 	std::string pron = "pronouns";
-	minecraft::node_root root_node = {.children_num = {.num = 2}, 
+	minecraft::node_root root_node = {.children_num = {.num = 2},
 		.children_index = {(minecraft::varint){.num = 1}, (minecraft::varint){.num = 2}}};
-	
+
 	minecraft::node_literal pron_command = {.children_num = {.num = 1},
 		.children_index = {(minecraft::varint){.num = 2}},
 		.name = {.len = pron.length(), .string = pron}};
 
 	minecraft::node_argument args = {.children_num = 0, .name {.len = pron.length(), .string = pron},
 	.parser_id = {.num = 5}, .varies = {.num = 2} };
-	
+
 	pkt_send(
-	    	{
+			{
 			&typeid(minecraft::varint), &typeid(minecraft::node_root), &typeid(minecraft::node_literal),
 			&typeid(minecraft::node_argument), &typeid(minecraft::varint)
 		},
@@ -90,7 +90,7 @@ void config(int sock, User user)
 {
 	std::string pack;
 	std::string features = "minecraft:vanilla";
-	
+
 	pkt_send({&typeid(minecraft::varint), &typeid(minecraft::string)}, {(minecraft::varint){.num = 0x01}, (minecraft::string){.len = features.length(), .string= features}}, user, 0x08);
 	pack.push_back(0x01);
 	pack.push_back(0x02);
@@ -140,12 +140,12 @@ void status_response(User user)
 }
 
 void send_chat(std::string contents, std::string sender)
-{	
+{
 	short lenght1 = (short)contents.length(), length2 = (short)sender.length();
 	for (int i = 0; i < users.size(); i++)
 	{
 		pkt_send({
-			&typeid(minecraft::string_tag), &typeid(minecraft::varint), 
+			&typeid(minecraft::string_tag), &typeid(minecraft::varint),
 			&typeid(minecraft::string_tag),
 			&typeid(bool)
 		},
@@ -181,14 +181,19 @@ int execute_pkt(packet p, int state, User &user, int index)
 					log_err("Invalid username size!");
 				uname = p.data;
 				uname = uname.substr(1, size);
+				if (std::filesystem::exists(uname))
+				{
+					users[index].from_file(uname);
+					log("Read from file!");
+				}
 				users[index].set_uname(uname);
 				connected++;
 				pkt_send(
 					{
-						&typeid(minecraft::uuid), 
+						&typeid(minecraft::uuid),
 						&typeid(minecraft::string),
 						&typeid(minecraft::varint)
-					}, 
+					},
 					{
 						(minecraft::uuid){.data = user.get_uuid().bytes()},
 						(minecraft::string){.len = uname.length(), .string = uname},
@@ -248,7 +253,7 @@ int execute_pkt(packet p, int state, User &user, int index)
 				manager.request_stop_thread(index);
 				manager.request_stop_thread(index - 1);*/
 				std::vector<const std::type_info*> types = {
-					&typeid(int), &typeid(bool), &typeid(minecraft::varint), &typeid(minecraft::string), &typeid(minecraft::varint), 
+					&typeid(int), &typeid(bool), &typeid(minecraft::varint), &typeid(minecraft::string), &typeid(minecraft::varint),
 					&typeid(minecraft::varint), &typeid(minecraft::varint), &typeid(bool), &typeid(bool), &typeid(bool),
 					&typeid(minecraft::string), &typeid(minecraft::string), &typeid(long), &typeid(unsigned char), &typeid(char),
 					&typeid(bool), &typeid(bool), &typeid(bool), &typeid(minecraft::varint)
@@ -257,7 +262,7 @@ int execute_pkt(packet p, int state, User &user, int index)
 					0, false, (minecraft::varint){.num = 1}, (minecraft::string){.len = strlen("minecraft:overworld"), .string = "minecraft:overworld"},
 					(minecraft::varint){.num = 20}, (minecraft::varint){.num = (unsigned long)user.get_render_distance()}, (minecraft::varint){.num = (unsigned long)user.get_render_distance()},
 					false, true, false, (minecraft::string){.len = strlen("minecraft:overworld"), .string = "minecraft:overworld"},
-					(minecraft::string){.len = strlen("minecraft:overworld"), .string = "minecraft:overworld"}, (long)123456, (unsigned char)3, 
+					(minecraft::string){.len = strlen("minecraft:overworld"), .string = "minecraft:overworld"}, (long)123456, (unsigned char)3,
 					(char)-1, false, true, false, (minecraft::varint){.num = 0}
 				};
 				pkt_send(types, values, user, 0x29);
@@ -278,7 +283,7 @@ int execute_pkt(packet p, int state, User &user, int index)
 						&typeid(double), &typeid(double), &typeid(double), &typeid(float), &typeid(float), &typeid(char), &typeid(minecraft::varint)
 					},
 					{
-						pos.x, pos.y, pos.z, 0.0f, 0.0f, (char)0, (minecraft::varint){.num = 0}
+						pos.x, pos.y, pos.z, pos.yaw, pos.pitch, (char)0, (minecraft::varint){.num = 0}
 					},
 					user, 0x3E
 				);
@@ -303,6 +308,7 @@ int execute_pkt(packet p, int state, User &user, int index)
 					user, 0x20
 				);
 				send_tab();
+				send_chat(std::format("{} connected", users[index].get_uname()), "SERVER");
 				commands(users[index]);
 				//game_event(13, 0.0f, user);
 				ret = 10;
@@ -347,20 +353,20 @@ int execute_pkt(packet p, int state, User &user, int index)
 				if (std::string("pronouns").starts_with(command))
 				{
 					pkt_send(
-					    {
+						{
 						&typeid(minecraft::varint), &typeid(minecraft::varint),
 						&typeid(minecraft::varint), &typeid(minecraft::varint),
 						&typeid(minecraft::string), &typeid(bool)
-					    },
-					    {
+						},
+						{
 						id, (minecraft::varint){.num = 0},
 						(minecraft::varint){.num = std::string("pronouns").length()},
 						(minecraft::varint){.num = 1},
 						(minecraft::string){.len = std::string("pronouns").length(),
 						.string = std::string("pronouns")}, false
 
-				            }, users[index], 0x10
-                                        );
+							}, users[index], 0x10
+					);
 				}
 			}
 		case 0x17:
@@ -438,15 +444,15 @@ int execute_pkt(packet p, int state, User &user, int index)
 	int state = 0;
 	bool closed = false;
 	char *buffer = (char *)calloc(1025, sizeof(char));
-    char *pkt = (char *)calloc(1025, sizeof(char));
+	char *pkt = (char *)calloc(1025, sizeof(char));
 	std::vector<packet> packets_to_process;
 	User user;
 	//users.push_back(user);
 	user.set_socket(sock);
 	bool first = true;
 
-    while (1)
-    {
+	while (1)
+	{
 	do
 	{
 		rd_status = recv(sock, buffer, 1024, 0);
@@ -464,9 +470,9 @@ int execute_pkt(packet p, int state, User &user, int index)
 	}
 	while (size < pkt[0]);
 		auto t1 = high_resolution_clock::now();
-        packets_to_process = process_packet(pkt);
-        for (int i = 0; i < packets_to_process.size(); i++)
-        {
+		packets_to_process = process_packet(pkt);
+		for (int i = 0; i < packets_to_process.size(); i++)
+		{
 			log("********************");
 			log("New packet");
 			log("Id: ", packets_to_process[i].id);
@@ -482,8 +488,8 @@ int execute_pkt(packet p, int state, User &user, int index)
 			}
 			std::cout << "\n";
 			state = execute_pkt(packets_to_process[i], state, user);
-            free(packets_to_process[i].data);
-        }
+			free(packets_to_process[i].data);
+		}
 		auto t2 = high_resolution_clock::now();
 		auto ms_int = duration_cast<milliseconds>(t2 - t1);
 
@@ -492,11 +498,11 @@ int execute_pkt(packet p, int state, User &user, int index)
 		log_header();
 		std::cout << "Time to process: ";
 		std::cout << ms_double.count() << "ms\n";
-        packets_to_process.clear();
+		packets_to_process.clear();
 		memset(buffer, 0, 1025);
 		memset(pkt, 0, 1025);
 		size = 0;
-    }
+	}
 	close(sock);
 }*/
 
@@ -511,12 +517,12 @@ void read_ev(char *pkt, int sock)
 	int index = 0;
 	auto t1 = high_resolution_clock::now();
 	packets_to_process = process_packet(pkt);
-	for (int i = 0; i < users.size(); i++) 
-	{ 
+	for (int i = 0; i < users.size(); i++)
+	{
 		if (sock == users[i].get_socket()) { //broken af
 			user = users[i];
 			index = i;
-			break; 
+			break;
 		}
 	}
 	int state = user.get_state();
@@ -557,12 +563,12 @@ void read_ev(char *pkt, int sock)
 void read_loop(int epfd)
 {
 	struct epoll_event events[MAX_EVENTS];
-    int events_ready = 0;
+	int events_ready = 0;
 	char buff[1025] = {0};
 	int rd_status = 0;
-    while (true)
-    {
-        events_ready = epoll_wait(epfd, events, MAX_EVENTS, -1);
+	while (true)
+	{
+		events_ready = epoll_wait(epfd, events, MAX_EVENTS, -1);
 		for (int i = 0; i < events_ready; i++)
 		{
 
@@ -571,18 +577,25 @@ void read_loop(int epfd)
 			{
 				close(events[i].data.fd);
 				remove_from_list(events[i].data.fd, epfd);
+				std::string disc_name;
 				for (int i = 0; i < users.size(); i++)
 				{
 					if (users[i].get_socket() == events[i].data.fd)
+					{
+						users[i].to_file();
+						log("User ", users[i].get_uname(), " saved to file!");
+						disc_name = users[i].get_uname();
 						users.erase(users.begin() + i);
+					}
 				}
 				connected--;
+				send_chat(std::format("{} disconnected", disc_name), "SERVER");
 				send_tab();
 			}
 			read_ev(buff, events[i].data.fd);
 			memset(buff, 0, 1024);
 		}
-    }
+	}
 }
 
 int main()
@@ -596,11 +609,11 @@ int main()
 		log("Config created!");
 	}
 	load_config();
-    if (SV_PORT > 0xFFFF)
+	if (SV_PORT > 0xFFFF)
 		log_err(std::format("Warning! The port provided in the config is higher than {} the port will be truncated into {}", 0xFFFF, (short)SV_PORT));
 	struct sockaddr_in addr =
 	{
-		AF_INET, 
+		AF_INET,
 		htons(SV_PORT),
 		0
 	};

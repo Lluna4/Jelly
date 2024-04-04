@@ -50,6 +50,7 @@ void create_config()
     cfg << "server-port=25565\n";
     cfg << "motd=A Minecraft Server\n";
     cfg << "test-disconnect-msg=Server in development\n";
+    cfg.close();
 }
 
 void load_config()
@@ -89,4 +90,5 @@ void load_config()
             }
         }
     }
+    infile.close();
 }

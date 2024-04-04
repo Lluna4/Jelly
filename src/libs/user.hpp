@@ -2,6 +2,10 @@
 #include <random>
 #include <chrono>
 #include <iostream>
+#include <fstream>
+#include <string>
+#include "tokenize.hpp"
+#include "logging.hpp"
 #include <uuid_v4/uuid_v4.h>
 #include <uuid_v4/endianness.h>
 
@@ -131,6 +135,57 @@ class User
         void set_state(int stat)
         {
             state = stat;
+        }
+
+        void to_file()
+        {
+            std::ofstream file(uname_);
+            file << uuid.str() << std::endl;
+            file << locale << std::endl;
+            file << render_distance << std::endl;
+            file << pos.pitch << "," << pos.yaw << "," << pos.x << "," << pos.y << "," << pos.z << std::endl;
+            file << pronouns << std::endl;
+            file.close();
+        }
+
+        void from_file(std::string filename)
+        {
+            std::ifstream file(filename);
+            std::string line;
+            int index = 0;
+            std::vector<std::string> tokens;
+            while (std::getline(file, line))
+            {
+                switch (index)
+                {
+                case 0:
+                    uuid.fromStr(line.c_str());
+                    break;
+                case 1:
+                    locale = line;
+                    break;
+                case 2:
+                    render_distance = atoi(line.c_str());
+                    break;
+                case 3:
+                    tokens = tokenize(line, ',');
+                    if (tokens.size() != 5)
+                    {
+                        log_err("Invalid position in file!");
+                        return;
+                    }
+                    pos.pitch = std::stof(tokens[0]);
+                    pos.yaw = std::stof(tokens[1]);
+                    pos.x = std::stod(tokens[2]);
+                    pos.y = std::stod(tokens[3]);
+                    pos.z = std::stod(tokens[4]);
+                    break;
+                case 4:
+                    pronouns = line;
+                    break;
+                }
+                index++;
+            }
         }
 
     private:
