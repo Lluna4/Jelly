@@ -85,12 +85,12 @@ int calc_len(std::vector<const std::type_info*> types, std::vector<std::any> val
 		else if (types[i]->hash_code() == typeid(minecraft::node_literal).hash_code())
 		{
 			minecraft::node_literal root = std::any_cast<minecraft::node_literal>(values[i]); 
-			size += sizeof(char) * 2 + root.children_index.size() + root.name.len; 
+			size += sizeof(char) * 3 + root.children_index.size() + root.name.len; 
 		}
 		else if (types[i]->hash_code() == typeid(minecraft::node_argument).hash_code())
 		{
 			minecraft::node_argument root = std::any_cast<minecraft::node_argument>(values[i]); 
-			size += sizeof(char) * 4 + root.children_index.size() + root.name.len; 
+			size += sizeof(char) * 5 + root.children_index.size() + root.name.len; 
 		}
 	}
 	return size;

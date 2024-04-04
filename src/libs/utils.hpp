@@ -186,7 +186,7 @@ namespace minecraft
 
 	struct node_argument
 	{
-		char flag = 0x01;
+		char flag = 0x02;
 		varint children_num;
 		std::vector<varint> children_index;
 		string name;

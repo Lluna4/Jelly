@@ -42,7 +42,7 @@ void commands(User user)
 		.name = {.len = pron.length(), .string = pron}};
 
 	minecraft::node_argument args = {.children_num = 0, .name {.len = pron.length(), .string = pron},
-	.parser_id = {.num = 5}, .varies = {.num = 0} };
+	.parser_id = {.num = 5}, .varies = {.num = 2} };
 	
 	pkt_send(
 	    	{
