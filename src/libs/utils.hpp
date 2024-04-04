@@ -11,22 +11,22 @@ struct packet
 	char *data;
 };
 
-std::size_t ReadUleb128(const char* addr, unsigned long* ret) 
+std::size_t ReadUleb128(const char* addr, unsigned long* ret)
 {
   unsigned long result = 0;
   int shift = 0;
   std::size_t count = 0;
-  
+
 
   	while (1) {
-    unsigned char byte = *reinterpret_cast<const unsigned char*>(addr);
-    addr++;
-    count++;
+	unsigned char byte = *reinterpret_cast<const unsigned char*>(addr);
+	addr++;
+	count++;
 
-    result |= (byte & 0x7f) << shift;
-    shift += 7;
+	result |= (byte & 0x7f) << shift;
+	shift += 7;
 
-    if (!(byte & 0x80)) break;
+	if (!(byte & 0x80)) break;
   }
 
   *ret = result;
@@ -34,19 +34,19 @@ std::size_t ReadUleb128(const char* addr, unsigned long* ret)
   return count;
 }
 
-std::size_t WriteUleb128(std::string &dest, unsigned long val) 
+std::size_t WriteUleb128(std::string &dest, unsigned long val)
 {
   std::size_t count = 0;
 
   do {
-    unsigned char byte = val & 0x7f;
-    val >>= 7;
+	unsigned char byte = val & 0x7f;
+	val >>= 7;
 
-    if (val != 0)
-      byte |= 0x80;  // mark this byte to show that more bytes will follow
+	if (val != 0)
+	  byte |= 0x80;  // mark this byte to show that more bytes will follow
 
-    dest.push_back(byte);
-    count++;
+	dest.push_back(byte);
+	count++;
   } while (val != 0);
 
   return count;
@@ -86,26 +86,26 @@ std::string read_string(char *str)
 
 double read_double(char *buf)
 {
-    uint64_t num_as_uint64;
-    double num;
-	
-    memcpy(&num_as_uint64, buf, sizeof(uint64_t));
-    num_as_uint64 = be64toh(num_as_uint64);
-    memcpy(&num, &num_as_uint64, sizeof(double));
+	uint64_t num_as_uint64;
+	double num;
 
-    return num;
+	memcpy(&num_as_uint64, buf, sizeof(uint64_t));
+	num_as_uint64 = be64toh(num_as_uint64);
+	memcpy(&num, &num_as_uint64, sizeof(double));
+
+	return num;
 }
 
 float read_float(char *buf)
 {
-    uint32_t num_as_uint32;
-    float num;
-	
-    memcpy(&num_as_uint32, buf, sizeof(uint32_t));
-    num_as_uint32 = be32toh(num_as_uint32);
-    memcpy(&num, &num_as_uint32, sizeof(float));
+	uint32_t num_as_uint32;
+	float num;
 
-    return num;
+	memcpy(&num_as_uint32, buf, sizeof(uint32_t));
+	num_as_uint32 = be32toh(num_as_uint32);
+	memcpy(&num, &num_as_uint32, sizeof(float));
+
+	return num;
 }
 
 char *mem_dup(char *buf, int size)
@@ -200,4 +200,10 @@ void send_varint(int fd, unsigned long val)
 	std::string buf;
 	WriteUleb128(buf, val);
 	send(fd, buf.c_str(), buf.length(), 0);
+}
+
+void send_string(int fd, minecraft::string str)
+{
+	send_varint(fd, str.len);
+	send(fd, str.string.c_str(), str.string.length(), 0);
 }

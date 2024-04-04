@@ -177,8 +177,7 @@ void pkt_send(std::vector<const std::type_info*> types, std::vector<std::any> va
 		else if (types[i]->hash_code() == typeid(minecraft::string).hash_code())
 		{
 			struct minecraft::string str = std::any_cast<minecraft::string>(values[i]);
-			send_varint(fd, (unsigned long)str.string.length());
-			send(fd, str.string.c_str(), str.string.length(), 0);
+			send_string(fd, str);
 		}
 		else if (types[i]->hash_code() == typeid(minecraft::string_tag).hash_code())
 		{
@@ -231,8 +230,7 @@ void pkt_send(std::vector<const std::type_info*> types, std::vector<std::any> va
 			{
 				send_varint(fd, root.children_index[i].num);
 			}
-			send_varint(fd, root.name.len);
-			send(fd, root.name.string.c_str(), root.name.len, 0);
+			send_string(fd, root.name);
 		}
 		else if (types[i]->hash_code() == typeid(minecraft::node_argument).hash_code())
 		{
@@ -243,8 +241,7 @@ void pkt_send(std::vector<const std::type_info*> types, std::vector<std::any> va
 			{
 				send_varint(fd, root.children_index[i].num);
 			}
-			send_varint(fd, root.name.len);
-			send(fd, root.name.string.c_str(), root.name.len, 0);
+			send_string(fd, root.name);
 			send_varint(fd, root.parser_id.num);
 			send_varint(fd, root.varies.num);
 		}
