@@ -10,6 +10,7 @@
 #include <vector>
 #include <typeinfo>
 #include <format>
+#include <unordered_map>
 #include <nlohmann/json.hpp>
 #include "libs/test_epoll.hpp"
 #include <sys/epoll.h>
@@ -28,7 +29,7 @@ using json = nlohmann::json;
 int connected = 0;
 int epfd = 0;
 
-std::vector<User> users;
+std::unordered_map<int, User> users;
 
 void commands(User user)
 {
@@ -58,18 +59,29 @@ void send_tab()
 {
 	std::vector<const std::type_info *> types = {&typeid(char), &typeid(minecraft::varint)};
 	std::vector<std::any> values = {(char)(0x01 | 0x08 | 0x20), (minecraft::varint){.num = (unsigned long)connected}};
-	for (int i = 0; i < users.size(); i++)
+	for (auto& value: users)
 	{
-		std::string formatted_name = std::format("{} [{}]", users[i].get_uname() ,users[i].get_pronouns());
+		std::string formatted_name = std::format("{} [{}]", value.second.get_uname() ,value.second.get_pronouns());
 		std::vector<const std::type_info *> buf = {&typeid(minecraft::uuid), &typeid(minecraft::string), &typeid(minecraft::varint), &typeid(bool),&typeid(bool), &typeid(minecraft::string_tag)};
-		std::vector<std::any> val = {(minecraft::uuid){.data = users[i].get_uuid().bytes()},(minecraft::string){.len = users[i].get_uname().length(), .string = users[i].get_uname()}, (minecraft::varint){.num = 0}, true, true,(minecraft::string_tag){.len = (short)formatted_name.length(), .string = formatted_name}};
+		std::vector<std::any> val = {(minecraft::uuid){.data = value.second.get_uuid().bytes()},(minecraft::string){.len = value.second.get_uname().length(), .string = value.second.get_uname()}, (minecraft::varint){.num = 0}, true, true,(minecraft::string_tag){.len = (short)formatted_name.length(), .string = formatted_name}};
 		types.insert(types.end(), buf.begin(), buf.end());
 		values.insert(values.end(), val.begin(), val.end());
 	}
-	for (int i = 0; i < users.size(); i++)
+	for (auto& value: users)
 	{
-		pkt_send(types, values, users[i], 0x3C);
+		pkt_send(types, values, value.second, 0x3C);
 	}
+}
+
+void remove_tab(User user)
+{
+	pkt_send(
+		{
+			&typeid(minecraft::varint), &typeid(minecraft::uuid)
+		},
+		{
+			(minecraft::varint){.num = 1}, (minecraft::uuid){.data = user.get_uuid().bytes()}
+		}, user, 0x3B);
 }
 
 void login_succ(User user)
@@ -142,7 +154,7 @@ void status_response(User user)
 void send_chat(std::string contents, std::string sender)
 {
 	short lenght1 = (short)contents.length(), length2 = (short)sender.length();
-	for (int i = 0; i < users.size(); i++)
+	for (auto& value: users)
 	{
 		pkt_send({
 			&typeid(minecraft::string_tag), &typeid(minecraft::varint),
@@ -154,8 +166,34 @@ void send_chat(std::string contents, std::string sender)
 			(minecraft::varint){.num = 0},
 			(minecraft::string_tag){.len = length2, .string = sender},
 			false
-		}, users[i], 0x1C);
+		}, value.second, 0x1C);
 	}
+}
+
+void system_chat(std::string contents)
+{
+	short lenght = contents.length();
+	for (auto& value: users)
+	{
+		pkt_send(
+			{
+				&typeid(minecraft::string_tag), &typeid(bool)
+			},
+			{
+				(minecraft::string_tag){.len = lenght, .string = contents}, false
+			}, value.second, 0x69);
+	}
+}
+
+void update_list(User user)
+{
+	User found_user;
+	auto found = users.find(user.get_socket());
+	if (found != users.end())
+		found->second = user;
+	else
+		return;
+
 }
 
 int execute_pkt(packet p, int state, User &user, int index)
@@ -183,10 +221,10 @@ int execute_pkt(packet p, int state, User &user, int index)
 				uname = uname.substr(1, size);
 				if (std::filesystem::exists(uname))
 				{
-					users[index].from_file(uname);
+					user.from_file(uname);
 					log("Read from file!");
 				}
-				users[index].set_uname(uname);
+				user.set_uname(uname);
 				connected++;
 				pkt_send(
 					{
@@ -206,8 +244,8 @@ int execute_pkt(packet p, int state, User &user, int index)
 			else if (state == 4)
 			{
 				buf2 = read_string(p.data, buf);
-				users[index].set_locale(buf);
-				users[index].set_render_distance((int)p.data[buf2 + 1]);
+				user.set_locale(buf);
+				user.set_render_distance((int)p.data[buf2 + 1]);
 				log("New locale: ", user.get_locale());
 				log("New render distance: ", user.get_render_distance());
 				registry_data(user);
@@ -232,11 +270,7 @@ int execute_pkt(packet p, int state, User &user, int index)
 				send(user.get_socket(), p.data, sizeof(long), 0);
 				close(user.get_socket());
 				remove_from_list(user.get_socket(), epfd);
-				for (int i = 0; i < users.size(); i++)
-				{
-					if (users[i].get_socket() == user.get_socket())
-						users.erase(users.begin() + i);
-				}
+				users.erase(user.get_socket());
 			}
 			break;
 		case 2:
@@ -308,8 +342,8 @@ int execute_pkt(packet p, int state, User &user, int index)
 					user, 0x20
 				);
 				send_tab();
-				send_chat(std::format("{} connected", users[index].get_uname()), "SERVER");
-				commands(users[index]);
+				system_chat(std::format("{} connected", user.get_uname()));
+				commands(user);
 				//game_event(13, 0.0f, user);
 				ret = 10;
 			}
@@ -330,7 +364,8 @@ int execute_pkt(packet p, int state, User &user, int index)
 				if (command.starts_with("pronouns"))
 				{
 					command_contents = command.substr(command.find(' ') + 1);
-					users[index].set_pronouns(command_contents);
+					user.set_pronouns(command_contents);
+					update_list(user);
 					send_tab();
 					send_chat("Changed pronouns", "SERVER");
 				}
@@ -340,7 +375,7 @@ int execute_pkt(packet p, int state, User &user, int index)
 			if (state == 10)
 			{
 				std::string message = read_string(p.data);
-				std::string sender = std::format("{} [{}]", users[index].get_uname(), users[index].get_pronouns());
+				std::string sender = std::format("{} [{}]", user.get_uname(), user.get_pronouns());
 				send_chat(message, sender);
 			}
 			break;
@@ -365,7 +400,7 @@ int execute_pkt(packet p, int state, User &user, int index)
 						(minecraft::string){.len = std::string("pronouns").length(),
 						.string = std::string("pronouns")}, false
 
-							}, users[index], 0x10
+							}, user, 0x10
 					);
 				}
 			}
@@ -381,7 +416,7 @@ int execute_pkt(packet p, int state, User &user, int index)
 				pos.z = read_double(ptr);
 				pos.yaw = pos.yaw;
 				pos.pitch = pos.pitch;
-				users[index].update_position(pos);
+				user.update_position(pos);
 				log_header();
 				std::cout << "New pos: x: " << pos.x << " y: " << pos.y << " z: " << pos.z << " yaw: " << pos.yaw << " pitch: " << pos.pitch << std::endl;
 				if (pos.y <= 500.0f)
@@ -412,7 +447,7 @@ int execute_pkt(packet p, int state, User &user, int index)
 				pos.yaw = read_float(ptr);
 				ptr = ptr + sizeof(float);
 				pos.pitch = read_float(ptr);
-				users[index].update_position(pos);
+				user.update_position(pos);
 				log_header();
 				std::cout << "New pos2: x: " << pos.x << " y: " << pos.y << " z: " << pos.z << " yaw: " << pos.yaw << " pitch: " << pos.pitch << std::endl;
 				if (pos.y <= 500.0f)
@@ -506,29 +541,18 @@ int execute_pkt(packet p, int state, User &user, int index)
 	close(sock);
 }*/
 
-void read_ev(char *pkt, int sock)
+User read_ev(char *pkt, int sock, User user)
 {
 	using std::chrono::high_resolution_clock;
 	using std::chrono::duration_cast;
 	using std::chrono::duration;
 	using std::chrono::milliseconds;
 	std::vector<packet> packets_to_process;
-	User user;
-	int index = 0;
 	auto t1 = high_resolution_clock::now();
 	packets_to_process = process_packet(pkt);
-	for (int i = 0; i < users.size(); i++)
-	{
-		if (sock == users[i].get_socket()) { //broken af
-			user = users[i];
-			index = i;
-			break;
-		}
-	}
 	int state = user.get_state();
-	log(state);
-	log(index);
-	log(users.size());
+	log("State", state);
+	log("Size: ", users.size());
 	for (int i = 0; i < packets_to_process.size(); i++)
 	{
 		log("********************");
@@ -545,9 +569,9 @@ void read_ev(char *pkt, int sock)
 				printf("%02hhX ", (int)packets_to_process[i].data[x]);
 		}
 		std::cout << "\n";
-		state = execute_pkt(packets_to_process[i], state, user, index);
+		state = execute_pkt(packets_to_process[i], state, user, 0);
 		log(state);
-		users[index].set_state(state);
+		user.set_state(state);
 		free(packets_to_process[i].data);
 	}
 	auto t2 = high_resolution_clock::now();
@@ -558,6 +582,7 @@ void read_ev(char *pkt, int sock)
 	log_header();
 	std::cout << "Time to process: ";
 	std::cout << ms_double.count() << "ms\n";
+	return user;
 }
 
 void read_loop(int epfd)
@@ -577,22 +602,30 @@ void read_loop(int epfd)
 			{
 				close(events[i].data.fd);
 				remove_from_list(events[i].data.fd, epfd);
+				User found_user;
+				auto found = users.find(events[i].data.fd);
+				if (found != users.end())
+					found_user = found->second;
+				else
+					break;
 				std::string disc_name;
-				for (int i = 0; i < users.size(); i++)
-				{
-					if (users[i].get_socket() == events[i].data.fd)
-					{
-						users[i].to_file();
-						log("User ", users[i].get_uname(), " saved to file!");
-						disc_name = users[i].get_uname();
-						users.erase(users.begin() + i);
-					}
-				}
+				found_user.to_file();
+				log("User ", found_user.get_uname(), " saved to file!");
+				disc_name = found_user.get_uname();
+				users.erase(found->first);
+				
 				connected--;
-				send_chat(std::format("{} disconnected", disc_name), "SERVER");
-				send_tab();
+				system_chat(std::format("{} disconnected", disc_name));
+				remove_tab(found_user);
 			}
-			read_ev(buff, events[i].data.fd);
+			User user;
+			int index = 0;
+			auto found = users.find(events[i].data.fd);
+			if (found != users.end())
+				user = found->second;
+			else
+				break;
+			found->second = read_ev(buff, events[i].data.fd, user);
 			memset(buff, 0, 1024);
 		}
 	}
@@ -632,9 +665,7 @@ int main()
 	{
 		int client_fd = 0;
 		client_fd = accept(sock, nullptr, nullptr);
-		User user;
-		user.set_socket(client_fd);
-		users.push_back(user);
+		users.emplace(client_fd, User(" ", client_fd));
 		add_to_list(client_fd, epfd);
 	}
 }
