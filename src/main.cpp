@@ -170,6 +170,22 @@ void send_chat(std::string contents, std::string sender)
 	}
 }
 
+void send_chat(std::string contents, std::string sender, User user)
+{
+	short lenght1 = (short)contents.length(), length2 = (short)sender.length();
+	pkt_send({
+			&typeid(minecraft::string_tag), &typeid(minecraft::varint),
+			&typeid(minecraft::string_tag),
+			&typeid(bool)
+		},
+		{
+			(minecraft::string_tag){.len = lenght1, .string = contents},
+			(minecraft::varint){.num = 0},
+			(minecraft::string_tag){.len = length2, .string = sender},
+			false
+		}, user, 0x1C);
+}
+
 void system_chat(std::string contents)
 {
 	short lenght = contents.length();
@@ -183,6 +199,18 @@ void system_chat(std::string contents)
 				(minecraft::string_tag){.len = lenght, .string = contents}, false
 			}, value.second, 0x69);
 	}
+}
+
+void system_chat(std::string contents, User user)
+{
+	short lenght = contents.length();
+	pkt_send(
+		{
+			&typeid(minecraft::string_tag), &typeid(bool)
+		},
+		{
+			(minecraft::string_tag){.len = lenght, .string = contents}, false
+		}, user, 0x69);
 }
 
 void update_list(User user)
@@ -342,7 +370,7 @@ int execute_pkt(packet p, int state, User &user, int index)
 					user, 0x20
 				);
 				send_tab();
-				system_chat(std::format("{} connected", user.get_uname()));
+				system_chat(std::format("§e{} connected", user.get_uname()));
 				commands(user);
 				//game_event(13, 0.0f, user);
 				ret = 10;
@@ -367,7 +395,10 @@ int execute_pkt(packet p, int state, User &user, int index)
 					user.set_pronouns(command_contents);
 					update_list(user);
 					send_tab();
-					send_chat("Changed pronouns", "SERVER");
+					if (user.get_locale() == "en_us")
+						system_chat(std::format("Changed pronouns to {}", command_contents), user);
+					else if(user.get_locale() == "es_es")
+						system_chat(std::format("Se cambiaron los pronombres a {}", command_contents), user);
 				}
 			}
 			break;
@@ -615,7 +646,7 @@ void read_loop(int epfd)
 				users.erase(found->first);
 				
 				connected--;
-				system_chat(std::format("{} disconnected", disc_name));
+				system_chat(std::format("§e{} disconnected", disc_name));
 				remove_tab(found_user);
 			}
 			User user;
