@@ -3,6 +3,7 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <vector>
+#include <cstdint>
 
 struct packet
 {
@@ -192,6 +193,27 @@ namespace minecraft
 		string name;
 		varint parser_id;
 		varint varies;
+	};
+
+	struct paletted_container
+	{
+		unsigned char bits_per_entry;
+		varint palette_data_entries;
+		std::vector<varint> block_ids;
+		varint data_lenght;
+		std::vector<long> block_indexes;
+	};
+
+	struct chunk_section
+	{
+		short block_count;
+		paletted_container blocks;
+		paletted_container biome;
+	};
+
+	struct chunk
+	{
+		std::vector<chunk_section> chunks;
 	};
 }
 

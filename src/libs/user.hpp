@@ -44,7 +44,7 @@ class User
         {
             UUIDv4::UUIDGenerator<std::mt19937_64> uuidGenerator;
             uuid = uuidGenerator.getUUID();
-            pos = {.x = 0.0f, .y = 1000.0f, .z = 64.0f, .yaw = 0.0f, .pitch = 0.0f};
+            pos = {.x = 0.0f, .y = 20.0f, .z = 0.0f, .yaw = 0.0f, .pitch = 0.0f};
             pronouns = "they/them";
             state = 0;
         }
@@ -54,7 +54,7 @@ class User
         {
             UUIDv4::UUIDGenerator<std::mt19937_64> uuidGenerator;
             uuid = uuidGenerator.getUUID();
-            pos = {.x = 0.0f, .y = 1000.0f, .z = 64.0f, .yaw = 0.0f, .pitch = 0.0f};
+            pos = {.x = 0.0f, .y = 20.0f, .z = 0.0f, .yaw = 0.0f, .pitch = 0.0f};
             pronouns = "they/them";
             state = 0;
         }

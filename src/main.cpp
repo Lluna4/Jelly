@@ -14,6 +14,7 @@
 #include <nlohmann/json.hpp>
 #include "libs/test_epoll.hpp"
 #include <sys/epoll.h>
+#include "libs/world_gen.hpp"
 #if defined(__linux__)
 #  include <endian.h>
 #elif defined(__FreeBSD__) || defined(__NetBSD__)
@@ -29,14 +30,22 @@ using json = nlohmann::json;
 int connected = 0;
 int epfd = 0;
 
+minecraft::chunk chunks;
 std::unordered_map<int, User> users;
 
 void commands(User user)
 {
 	//only /pronoun command
 	std::string pron = "pronouns";
-	minecraft::node_root root_node = {.children_num = {.num = 2},
-		.children_index = {(minecraft::varint){.num = 1}, (minecraft::varint){.num = 2}}};
+	minecraft::node_root root_node;
+	if (user.get_uname().compare("Alexandra") == 0 || user.get_uname().compare("carlyjb17") == 0)
+		root_node = {.children_num = {.num = 3},
+			.children_index = {(minecraft::varint){.num = 1}, (minecraft::varint){.num = 2}, (minecraft::varint){.num = 3}}};
+	else
+	{
+		root_node = {.children_num = {.num = 2},
+			.children_index = {(minecraft::varint){.num = 1}, (minecraft::varint){.num = 2}}};	
+	}
 
 	minecraft::node_literal pron_command = {.children_num = {.num = 1},
 		.children_index = {(minecraft::varint){.num = 2}},
@@ -44,15 +53,35 @@ void commands(User user)
 
 	minecraft::node_argument args = {.children_num = 0, .name {.len = pron.length(), .string = pron},
 	.parser_id = {.num = 5}, .varies = {.num = 2} };
+	
+	if (user.get_uname().compare("Alexandra") == 0 || user.get_uname().compare("carlyjb17") == 0)
+	{
+		std::string florecilla = "florecilla";
 
-	pkt_send(
+		minecraft::node_literal pron_command2 = {.children_num = {.num = 0},
+			.children_index = {},
+			.name = {.len = florecilla.length(), .string = florecilla}};
+
+		pkt_send(
+				{
+				&typeid(minecraft::varint), &typeid(minecraft::node_root), &typeid(minecraft::node_literal),
+				&typeid(minecraft::node_argument), &typeid(minecraft::node_literal),&typeid(minecraft::varint)
+			},
 			{
-			&typeid(minecraft::varint), &typeid(minecraft::node_root), &typeid(minecraft::node_literal),
-			&typeid(minecraft::node_argument), &typeid(minecraft::varint)
-		},
-		{
-			(minecraft::varint){.num = 3}, root_node, pron_command, args, (minecraft::varint){.num = 0}
-		}, user, 0x11);
+				(minecraft::varint){.num = 4}, root_node, pron_command, args, pron_command2,(minecraft::varint){.num = 0}
+			}, user, 0x11);
+	}
+	else
+	{
+		pkt_send(
+				{
+				&typeid(minecraft::varint), &typeid(minecraft::node_root), &typeid(minecraft::node_literal),
+				&typeid(minecraft::node_argument), &typeid(minecraft::varint)
+			},
+			{
+				(minecraft::varint){.num = 3}, root_node, pron_command, args, (minecraft::varint){.num = 0}
+			}, user, 0x11);
+	}
 }
 
 void send_tab()
@@ -75,13 +104,16 @@ void send_tab()
 
 void remove_tab(User user)
 {
-	pkt_send(
-		{
-			&typeid(minecraft::varint), &typeid(minecraft::uuid)
-		},
-		{
-			(minecraft::varint){.num = 1}, (minecraft::uuid){.data = user.get_uuid().bytes()}
-		}, user, 0x3B);
+	for (auto& value: users)
+	{
+		pkt_send(
+			{
+				&typeid(minecraft::varint), &typeid(minecraft::uuid)
+			},
+			{
+				(minecraft::varint){.num = 1}, (minecraft::uuid){.data = user.get_uuid().bytes()}
+			}, value.second, 0x3B);
+	}
 }
 
 void login_succ(User user)
@@ -222,6 +254,29 @@ void update_list(User user)
 	else
 		return;
 
+}
+
+void set_center_chunk(User user)
+{
+	pkt_send(
+		{
+			&typeid(minecraft::varint), &typeid(minecraft::varint)
+		},
+		{
+			(minecraft::varint){.num = 0}, (minecraft::varint){.num = 0}
+		}, user, 0x52);
+}
+
+void send_mock_chunk(User user)
+{
+	minecraft::varint size = {.num = ((((1 * 5) + (1 * 3)))+ ((sizeof(long) * 256) + (sizeof(long) * 4)) + sizeof(short)) * 24};
+	std::vector<const std::type_info *> types = {&typeid(int), &typeid(int), &typeid(char), &typeid(char), &typeid(minecraft::varint), 
+		&typeid(minecraft::chunk), &typeid(minecraft::varint), &typeid(minecraft::varint),
+		&typeid(minecraft::varint), &typeid(minecraft::varint),&typeid(minecraft::varint), &typeid(minecraft::varint), &typeid(minecraft::varint)};
+	std::vector<std::any> values = {0, 0, (char)0x0a, (char)0x00, size, chunks,
+	(minecraft::varint){.num = 0}, (minecraft::varint){.num = 0}, (minecraft::varint){.num = 0}, (minecraft::varint){.num = 0},
+	(minecraft::varint){.num = 0}, (minecraft::varint){.num = 0}, (minecraft::varint){.num = 0}};
+	pkt_send(types, values, user, 0x25);
 }
 
 int execute_pkt(packet p, int state, User &user, int index)
@@ -369,6 +424,8 @@ int execute_pkt(packet p, int state, User &user, int index)
 					},
 					user, 0x20
 				);
+				set_center_chunk(user);
+				send_mock_chunk(user);
 				send_tab();
 				system_chat(std::format("§e{} connected", user.get_uname()));
 				commands(user);
@@ -399,6 +456,10 @@ int execute_pkt(packet p, int state, User &user, int index)
 						system_chat(std::format("Changed pronouns to {}", command_contents), user);
 					else if(user.get_locale() == "es_es")
 						system_chat(std::format("Se cambiaron los pronombres a {}", command_contents), user);
+				}
+				else if (command.starts_with("florecilla"))
+				{
+					system_chat("Si puedes ver esto es que eres una florecilla y eres una persona muy muy importante para mi, muchisimas gracias por todo! Gracias a ti soy muy feliz", user);
 				}
 			}
 			break;
@@ -450,7 +511,7 @@ int execute_pkt(packet p, int state, User &user, int index)
 				user.update_position(pos);
 				log_header();
 				std::cout << "New pos: x: " << pos.x << " y: " << pos.y << " z: " << pos.z << " yaw: " << pos.yaw << " pitch: " << pos.pitch << std::endl;
-				if (pos.y <= 500.0f)
+				/*if (pos.y <= 500.0f)
 				{
 					pkt_send(
 						{
@@ -461,7 +522,7 @@ int execute_pkt(packet p, int state, User &user, int index)
 						},
 						user, 0x3E
 					);
-				}
+				}*/
 			}
 			break;
 		case 0x18:
@@ -481,7 +542,7 @@ int execute_pkt(packet p, int state, User &user, int index)
 				user.update_position(pos);
 				log_header();
 				std::cout << "New pos2: x: " << pos.x << " y: " << pos.y << " z: " << pos.z << " yaw: " << pos.yaw << " pitch: " << pos.pitch << std::endl;
-				if (pos.y <= 500.0f)
+				/*if (pos.y <= 500.0f)
 				{
 					pkt_send(
 						{
@@ -492,7 +553,7 @@ int execute_pkt(packet p, int state, User &user, int index)
 						},
 						user, 0x3E
 					);
-				}
+				}*/
 			}
 			break;
 	}
@@ -690,6 +751,19 @@ int main()
 	}
 	log(std::format("Server listening to {}:{}", SV_IP, SV_PORT));
 	listen(sock, 32);
+	log("Generating world...");
+	int in = 0;
+	while (in < 24)
+	{
+		minecraft::chunk_section new_chunk;
+		if (in < 12)
+			new_chunk = {.block_count = 4096, .blocks = world_gen(), .biome = biome_gen()};
+		else
+			new_chunk = {.block_count = 0, .blocks = world_gen_empty(), .biome = biome_gen()};
+		chunks.chunks.push_back(new_chunk);
+		in++;
+	}
+	log("World generated!");
 	std::thread read_l(read_loop, epfd);
 	read_l.detach();
 	while (1)
