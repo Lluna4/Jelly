@@ -271,25 +271,27 @@ void set_center_chunk(User user, unsigned long x = 0, unsigned long z = 0)
 
 void send_mock_chunk(User user, int x = 0, int y = 0)
 {
-	minecraft::varint size = {.num = (sizeof(short) + 6) * 24};
+	minecraft::varint size = {.num = spawn_chunks[0].size()};
 	std::vector<const std::type_info *> types = {&typeid(int), &typeid(int), &typeid(char), &typeid(char), &typeid(minecraft::varint), 
-		&typeid(minecraft::chunk), &typeid(minecraft::varint), &typeid(minecraft::varint),
-		&typeid(minecraft::varint), &typeid(minecraft::varint),&typeid(minecraft::varint), &typeid(minecraft::varint), &typeid(minecraft::varint)};
+		&typeid(minecraft::chunk), &typeid(minecraft::varint), &typeid(minecraft::varint), &typeid(long),
+		&typeid(minecraft::varint), &typeid(long),&typeid(minecraft::varint),
+		&typeid(long),&typeid(minecraft::varint), &typeid(long), &typeid(minecraft::varint), &typeid(minecraft::varint)};
 	std::vector<std::any> values = {x, y, (char)0x0a, (char)0x00, size, spawn_chunks[0],
-	(minecraft::varint){.num = 0}, (minecraft::varint){.num = 0}, (minecraft::varint){.num = 0}, (minecraft::varint){.num = 0},
-	(minecraft::varint){.num = 0}, (minecraft::varint){.num = 0}, (minecraft::varint){.num = 0}};
+	(minecraft::varint){.num = 0}, (minecraft::varint){.num = 1}, (long)0,(minecraft::varint){.num = 1}, (long)0,(minecraft::varint){.num = 1},
+	(long)0, (minecraft::varint){.num = 1}, (long)0,(minecraft::varint){.num = 0}, (minecraft::varint){.num = 0}};
 	pkt_send(types, values, user, 0x25);
 }
 
 void send_empty_chunk(User user, int x = 0, int y = 0)
 {
-	minecraft::varint size = {.num = (sizeof(short) + 6) * 24};
+	minecraft::varint size = {.num = spawn_chunks[0].size()};
 	std::vector<const std::type_info *> types = {&typeid(int), &typeid(int), &typeid(char), &typeid(char), &typeid(minecraft::varint), 
-		&typeid(minecraft::chunk), &typeid(minecraft::varint), &typeid(minecraft::varint),
-		&typeid(minecraft::varint), &typeid(minecraft::varint),&typeid(minecraft::varint), &typeid(minecraft::varint), &typeid(minecraft::varint)};
+		&typeid(minecraft::chunk), &typeid(minecraft::varint), &typeid(minecraft::varint), &typeid(long),
+		&typeid(minecraft::varint), &typeid(long),&typeid(minecraft::varint),
+		&typeid(long),&typeid(minecraft::varint), &typeid(long), &typeid(minecraft::varint), &typeid(minecraft::varint)};
 	std::vector<std::any> values = {x, y, (char)0x0a, (char)0x00, size, empty_chunk,
-	(minecraft::varint){.num = 0}, (minecraft::varint){.num = 0}, (minecraft::varint){.num = 0}, (minecraft::varint){.num = 0},
-	(minecraft::varint){.num = 0}, (minecraft::varint){.num = 0}, (minecraft::varint){.num = 0}};
+	(minecraft::varint){.num = 0}, (minecraft::varint){.num = 1}, (long)0,(minecraft::varint){.num = 1}, (long)0,(minecraft::varint){.num = 1},
+	(long)0, (minecraft::varint){.num = 1}, (long)0,(minecraft::varint){.num = 0}, (minecraft::varint){.num = 0}};
 	pkt_send(types, values, user, 0x25);
 }
 
@@ -440,7 +442,6 @@ int execute_pkt(packet p, int state, User &user, int index)
 					user, 0x20
 				);
 				set_center_chunk(user);
-				send_mock_chunk(user, 0, 0);
 				for (int x = -17; x < 17; x++)
 				{
 					for (int z = -17; z <= 17; z++)
@@ -567,6 +568,7 @@ int execute_pkt(packet p, int state, User &user, int index)
 				user.update_position(pos);
 				log_header();
 				std::cout << "New pos2: x: " << pos.x << " y: " << pos.y << " z: " << pos.z << " yaw: " << pos.yaw << " pitch: " << pos.pitch << std::endl;
+				pkt_send({&typeid(long)},{(long)0},user, 0x24);
 				/*if (pos.y <= 500.0f)
 				{
 					pkt_send(

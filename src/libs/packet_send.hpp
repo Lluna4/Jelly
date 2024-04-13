@@ -72,7 +72,7 @@ int calc_len(std::vector<const std::type_info*> types, std::vector<std::any> val
 		}
 		else if (types[i]->hash_code() == typeid(minecraft::varint).hash_code())
 		{
-			std::size_t len;
+			std::size_t len = 0;
 			std::string buf;
 			len = WriteUleb128(buf ,std::any_cast<minecraft::varint>(values[i]).num);
 			size += len;
@@ -102,7 +102,8 @@ int calc_len(std::vector<const std::type_info*> types, std::vector<std::any> val
 		}
 		else if (types[i]->hash_code() == typeid(minecraft::chunk).hash_code())
 		{
-			size += (sizeof(short) + 6) * 24;
+			minecraft::chunk chun = std::any_cast<minecraft::chunk>(values[i]);
+			size += chun.size();
 		}
 	}
 	return size;
@@ -127,7 +128,8 @@ void pkt_send(std::vector<const std::type_info*> types, std::vector<std::any> va
 		if (types[i]->hash_code() == typeid(int).hash_code())
 		{
 			int a = std::any_cast<int>(values[i]);
-			send(fd, &a, sizeof(int), 0);
+			int conv = htobe32((*(uint32_t *)&a));
+			send(fd, &conv, sizeof(int), 0);
 		}
 		else if (types[i]->hash_code() == typeid(unsigned int).hash_code())
 		{
@@ -280,6 +282,7 @@ void pkt_send(std::vector<const std::type_info*> types, std::vector<std::any> va
 
 			for (int x = 0; x < chun.chunks.size(); x++)
 			{
+				chun.chunks[x].block_count = htobe16(*(uint16_t*)&chun.chunks[x].block_count);
 				send(fd, &chun.chunks[x].block_count, sizeof(short), 0);
 				minecraft::paletted_container cont = chun.chunks[x].blocks;
 

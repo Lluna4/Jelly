@@ -214,6 +214,43 @@ namespace minecraft
 	struct chunk
 	{
 		std::vector<chunk_section> chunks;
+
+		int size()
+		{
+			int ret = 0;
+			std::string buf;
+			std::size_t size = 0;
+			for (int x = 0; x < chunks.size(); x++)
+			{
+				ret += sizeof(short);
+				minecraft::paletted_container cont = chunks[x].blocks;
+
+				ret += sizeof(unsigned char);
+
+				ret += WriteUleb128(buf, cont.block_ids[0].num);
+
+				ret += WriteUleb128(buf, cont.data_lenght.num);
+
+				/*for (int i = 0; i < cont.block_indexes.size(); i++)
+				{
+					send(fd, &cont.block_indexes[i], sizeof(long), 0);
+				}*/
+				
+				minecraft::paletted_container cont2 = chunks[x].biome;
+
+				ret += sizeof(unsigned char);
+
+				ret += WriteUleb128(buf, cont2.block_ids[0].num);
+
+				ret += WriteUleb128(buf, cont2.data_lenght.num);
+
+				/*for (int i = 0; i < cont2.block_indexes.size(); i++)
+				{
+					send(fd, &cont2.block_indexes[i], sizeof(long), 0);
+				}*/
+			}
+			return ret;
+		}
 	};
 }
 
