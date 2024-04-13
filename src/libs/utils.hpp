@@ -19,16 +19,17 @@ std::size_t ReadUleb128(const char* addr, unsigned long* ret)
   std::size_t count = 0;
 
 
-  	while (1) {
-	unsigned char byte = *reinterpret_cast<const unsigned char*>(addr);
-	addr++;
-	count++;
+  	while (1) 
+	{
+		unsigned char byte = *reinterpret_cast<const unsigned char*>(addr);
+		addr++;
+		count++;
 
-	result |= (byte & 0x7f) << shift;
-	shift += 7;
+		result |= (byte & 0x7f) << shift;
+		shift += 7;
 
-	if (!(byte & 0x80)) break;
-  }
+		if (!(byte & 0x80)) break;
+  	}
 
   *ret = result;
 
@@ -55,7 +56,7 @@ std::size_t WriteUleb128(std::string &dest, unsigned long val)
 
 void write_string(std::string &str, std::string src)
 {
-	str.push_back(src.length());
+	WriteUleb128(str, src.length());
 	str.append(src);
 }
 
@@ -198,7 +199,6 @@ namespace minecraft
 	struct paletted_container
 	{
 		unsigned char bits_per_entry;
-		varint palette_data_entries;
 		std::vector<varint> block_ids;
 		varint data_lenght;
 		std::vector<long> block_indexes;

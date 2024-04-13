@@ -33,6 +33,7 @@ int epfd = 0;
 
 std::vector<minecraft::chunk> spawn_chunks;
 std::unordered_map<int, User> users;
+minecraft::chunk empty_chunk;
 
 void commands(User user)
 {
@@ -270,15 +271,28 @@ void set_center_chunk(User user, unsigned long x = 0, unsigned long z = 0)
 
 void send_mock_chunk(User user, int x = 0, int y = 0)
 {
-	minecraft::varint size = {.num = ((((1 * 5) + (1 * 3)))+ ((sizeof(long) * 256) + (sizeof(long) * 4)) + sizeof(short)) * 24};
+	minecraft::varint size = {.num = (sizeof(short) + 6) * 24};
 	std::vector<const std::type_info *> types = {&typeid(int), &typeid(int), &typeid(char), &typeid(char), &typeid(minecraft::varint), 
 		&typeid(minecraft::chunk), &typeid(minecraft::varint), &typeid(minecraft::varint),
 		&typeid(minecraft::varint), &typeid(minecraft::varint),&typeid(minecraft::varint), &typeid(minecraft::varint), &typeid(minecraft::varint)};
-	std::vector<std::any> values = {0, 0, (char)0x0a, (char)0x00, size, spawn_chunks[0],
+	std::vector<std::any> values = {x, y, (char)0x0a, (char)0x00, size, spawn_chunks[0],
 	(minecraft::varint){.num = 0}, (minecraft::varint){.num = 0}, (minecraft::varint){.num = 0}, (minecraft::varint){.num = 0},
 	(minecraft::varint){.num = 0}, (minecraft::varint){.num = 0}, (minecraft::varint){.num = 0}};
 	pkt_send(types, values, user, 0x25);
 }
+
+void send_empty_chunk(User user, int x = 0, int y = 0)
+{
+	minecraft::varint size = {.num = (sizeof(short) + 6) * 24};
+	std::vector<const std::type_info *> types = {&typeid(int), &typeid(int), &typeid(char), &typeid(char), &typeid(minecraft::varint), 
+		&typeid(minecraft::chunk), &typeid(minecraft::varint), &typeid(minecraft::varint),
+		&typeid(minecraft::varint), &typeid(minecraft::varint),&typeid(minecraft::varint), &typeid(minecraft::varint), &typeid(minecraft::varint)};
+	std::vector<std::any> values = {x, y, (char)0x0a, (char)0x00, size, empty_chunk,
+	(minecraft::varint){.num = 0}, (minecraft::varint){.num = 0}, (minecraft::varint){.num = 0}, (minecraft::varint){.num = 0},
+	(minecraft::varint){.num = 0}, (minecraft::varint){.num = 0}, (minecraft::varint){.num = 0}};
+	pkt_send(types, values, user, 0x25);
+}
+
 
 int execute_pkt(packet p, int state, User &user, int index)
 {
@@ -378,7 +392,7 @@ int execute_pkt(packet p, int state, User &user, int index)
 				};
 				std::vector<std::any> values = {
 					0, false, (minecraft::varint){.num = 1}, (minecraft::string){.len = strlen("minecraft:overworld"), .string = "minecraft:overworld"},
-					(minecraft::varint){.num = 16}, (minecraft::varint){.num = (unsigned long)24}, (minecraft::varint){.num = (unsigned long)1},
+					(minecraft::varint){.num = 20}, (minecraft::varint){.num = (unsigned long)32}, (minecraft::varint){.num = (unsigned long)32},
 					false, true, false, (minecraft::string){.len = strlen("minecraft:overworld"), .string = "minecraft:overworld"},
 					(minecraft::string){.len = strlen("minecraft:overworld"), .string = "minecraft:overworld"}, (long)123456, (unsigned char)3,
 					(char)-1, false, true, false, (minecraft::varint){.num = 0}
@@ -414,7 +428,7 @@ int execute_pkt(packet p, int state, User &user, int index)
 					},
 					user, 0x20
 				);
-				float eventf = 0;
+				float eventf = 1;
 				size = size - 2;
 				pkt_send(
 					{
@@ -426,13 +440,17 @@ int execute_pkt(packet p, int state, User &user, int index)
 					user, 0x20
 				);
 				set_center_chunk(user);
-				send_mock_chunk(user);
-				send_mock_chunk(user, 1, 0);
-				send_mock_chunk(user, 1, 1);
-				send_mock_chunk(user, 0, 1);
-				send_mock_chunk(user, -1, 0);
-				send_mock_chunk(user, -1, -1);
-				send_mock_chunk(user, 0, -1);
+				send_mock_chunk(user, 0, 0);
+				for (int x = -17; x < 17; x++)
+				{
+					for (int z = -17; z <= 17; z++)
+					{
+						if (abs(x) == 17 || abs(z) == 17)
+							send_empty_chunk(user, x, z);
+						else
+							send_mock_chunk(user, x, z);
+					}
+				}
 				send_tab();
 				system_chat(std::format("§e{} connected", user.get_uname()));
 				commands(user);
@@ -767,7 +785,7 @@ int main()
 		while (in < 24)
 		{
 			minecraft::chunk_section new_chunk;
-			if (in < 14)
+			if (in < 8)
 				new_chunk = {.block_count = 4096, .blocks = world_gen(), .biome = biome_gen()};
 			else
 				new_chunk = {.block_count = 0, .blocks = world_gen_empty(), .biome = biome_gen()};
@@ -776,6 +794,15 @@ int main()
 		}
 		spawn_chunks.push_back(chunks);
 		ii++;
+		in = 0;
+	}
+	in = 0;
+	while (in < 24)
+	{
+		minecraft::chunk_section new_chunk;
+		new_chunk = {.block_count = 0, .blocks = world_gen_empty(), .biome = biome_gen()};
+		empty_chunk.chunks.push_back(new_chunk);
+		in++;
 	}
 	log("World generated!");
 	std::thread read_l(read_loop, epfd);

@@ -19,28 +19,20 @@ void printBits(long n) {
 
 minecraft::paletted_container world_gen()
 {
-    minecraft::paletted_container ret = {.bits_per_entry = 4, .palette_data_entries = (minecraft::varint){.num = 2}, 
-    .block_ids = {(minecraft::varint){.num = 0}, (minecraft::varint){.num = 9}}, .data_lenght = (minecraft::varint){.num = 256}};
-
-    int index = 0;
-    std::vector<long> longs;
-
-    while (index < 256)
-    {
-        std::bitset<64> new_long;
-        for (int i = 0; i < 64; i += 4) 
-        {
-            new_long |= (0x1ULL << i);
-        }
-        longs.push_back((long)new_long.to_ulong());
-        index++;
-    }
-    ret.block_indexes = longs;
+    minecraft::paletted_container ret = {.bits_per_entry = 0, 
+    .block_ids = {(minecraft::varint){.num = 9}}, .data_lenght = (minecraft::varint){.num = 0}, .block_indexes = {}};
     return ret;
 }
 
 minecraft::paletted_container world_gen_empty()
 {
+    minecraft::paletted_container ret = {.bits_per_entry = 0, 
+    .block_ids = {(minecraft::varint){.num = 0}}, .data_lenght = (minecraft::varint){.num = 0}, .block_indexes = {}};
+    return ret;
+}
+
+/*minecraft::paletted_container world_gen_empty()
+{
     minecraft::paletted_container ret = {.bits_per_entry = 4, .palette_data_entries = (minecraft::varint){.num = 2}, 
     .block_ids = {(minecraft::varint){.num = 0}, (minecraft::varint){.num = 9}}, .data_lenght = (minecraft::varint){.num = 256}};
 
@@ -52,29 +44,18 @@ minecraft::paletted_container world_gen_empty()
         std::bitset<64> new_long;
         for (int i = 0; i < 64; i += 4) 
         {
-            new_long |= (0x1ULL << i);
+            new_long |= (0x0ULL << i);
         }
         longs.push_back(new_long.to_ulong());
         index++;
     }
     ret.block_indexes = longs;
     return ret;
-}
+}*/
 
 minecraft::paletted_container biome_gen()
 {
-    minecraft::paletted_container ret = {.bits_per_entry = 4, .palette_data_entries = (minecraft::varint){.num = 0}, 
-    .block_ids = {}, .data_lenght = (minecraft::varint){.num = 4}};
-
-    int index = 0;
-    std::vector<long> longs;
-
-    while (index < 4)
-    {
-        std::bitset<64> new_long;
-        longs.push_back(new_long.to_ulong());
-        index++;
-    }
-    ret.block_indexes = longs;
+    minecraft::paletted_container ret = {.bits_per_entry = 0, 
+    .block_ids = {(minecraft::varint){.num = 0}}, .data_lenght = (minecraft::varint){.num = 0}, .block_indexes = {}};
     return ret;
 }
