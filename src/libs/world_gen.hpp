@@ -20,21 +20,19 @@ void printBits(long n) {
 minecraft::paletted_container world_gen()
 {
     minecraft::paletted_container ret = {.bits_per_entry = 4, .palette_data_entries = (minecraft::varint){.num = 2}, 
-    .block_ids = {(minecraft::varint){.num = 0}, (minecraft::varint){.num = 2}}, .data_lenght = (minecraft::varint){.num = 256}};
+    .block_ids = {(minecraft::varint){.num = 0}, (minecraft::varint){.num = 9}}, .data_lenght = (minecraft::varint){.num = 256}};
 
     int index = 0;
     std::vector<long> longs;
 
     while (index < 256)
     {
-        std::bitset<32> new_long;
-        int i = 0;
-        while (i <= 32)
+        std::bitset<64> new_long;
+        for (int i = 0; i < 64; i += 4) 
         {
-            new_long |= (0x1 << (i));
-            i += 4;
+            new_long |= (0x1ULL << i);
         }
-        longs.push_back(new_long.to_ulong());
+        longs.push_back((long)new_long.to_ulong());
         index++;
     }
     ret.block_indexes = longs;
@@ -44,19 +42,17 @@ minecraft::paletted_container world_gen()
 minecraft::paletted_container world_gen_empty()
 {
     minecraft::paletted_container ret = {.bits_per_entry = 4, .palette_data_entries = (minecraft::varint){.num = 2}, 
-    .block_ids = {(minecraft::varint){.num = 0}, (minecraft::varint){.num = 2}}, .data_lenght = (minecraft::varint){.num = 256}};
+    .block_ids = {(minecraft::varint){.num = 0}, (minecraft::varint){.num = 9}}, .data_lenght = (minecraft::varint){.num = 256}};
 
     int index = 0;
     std::vector<long> longs;
 
     while (index < 256)
     {
-        std::bitset<32> new_long;
-        int i = 0;
-        while (i <= 32)
+        std::bitset<64> new_long;
+        for (int i = 0; i < 64; i += 4) 
         {
-            new_long |= (0x0 << (i));
-            i += 4;
+            new_long |= (0x1ULL << i);
         }
         longs.push_back(new_long.to_ulong());
         index++;
@@ -75,7 +71,7 @@ minecraft::paletted_container biome_gen()
 
     while (index < 4)
     {
-        std::bitset<32> new_long;
+        std::bitset<64> new_long;
         longs.push_back(new_long.to_ulong());
         index++;
     }
