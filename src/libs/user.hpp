@@ -44,9 +44,10 @@ class User
         {
             UUIDv4::UUIDGenerator<std::mt19937_64> uuidGenerator;
             uuid = uuidGenerator.getUUID();
-            pos = {.x = 0.0f, .y = 20.0f, .z = 0.0f, .yaw = 0.0f, .pitch = 0.0f};
+            pos = {.x = 0.0f, .y = 64.0f, .z = 0.0f, .yaw = 0.0f, .pitch = 0.0f};
             pronouns = "they/them";
             state = 0;
+            on_ground == true;
         }
 
         User(std::string uname, int socket)
@@ -54,9 +55,10 @@ class User
         {
             UUIDv4::UUIDGenerator<std::mt19937_64> uuidGenerator;
             uuid = uuidGenerator.getUUID();
-            pos = {.x = 0.0f, .y = 20.0f, .z = 0.0f, .yaw = 0.0f, .pitch = 0.0f};
+            pos = {.x = 0.0f, .y = 64.0f, .z = 0.0f, .yaw = 0.0f, .pitch = 0.0f};
             pronouns = "they/them";
             state = 0;
+            on_ground == true;
         }
 
         UUIDv4::UUID get_uuid()
@@ -97,6 +99,15 @@ class User
             return pos;
         }
 
+        bool get_on_ground()
+        {
+            return on_ground;
+        }
+        
+        void set_on_ground(bool set)
+        {
+            on_ground = set;
+        }
         void set_uuid(UUIDv4::UUID uuid_)
         {
             uuid = uuid_;
@@ -197,4 +208,5 @@ class User
         struct position pos;
         std::string pronouns;
         int state;
+        bool on_ground;
 };

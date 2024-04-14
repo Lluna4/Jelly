@@ -295,6 +295,85 @@ void send_empty_chunk(User user, int x = 0, int y = 0)
 	pkt_send(types, values, user, 0x25);
 }
 
+void spawn_entities_to_user(User user)
+{
+	for (auto& value: users)
+	{
+		if (value.first == user.get_socket())
+			continue;
+
+		position pos = value.second.get_position();
+		
+		std::vector<const std::type_info *> types = {&typeid(minecraft::varint), &typeid(minecraft::uuid), &typeid(minecraft::varint), 
+			&typeid(double), &typeid(double), &typeid(double), &typeid(char), &typeid(char), &typeid(char), &typeid(minecraft::varint), 
+			&typeid(short), &typeid(short), &typeid(short)};
+		
+		std::vector<std::any> values = {(minecraft::varint){.num = value.first}, (minecraft::uuid){.data = value.second.get_uuid().bytes()},
+			(minecraft::varint){.num = 124}, pos.x, pos.y, pos.z, (char)(pos.pitch * 360.0 / 256.0), (char)(pos.yaw * 360.0 / 256.0),
+			(char)(pos.yaw * 360.0 / 256.0), (minecraft::varint){.num = 0}, (short)0, (short)0, (short)0};
+		
+		pkt_send(types, values, user, 0x01);
+	}
+}
+
+void spawn_user_to_users(User user)
+{
+	position pos = user.get_position();
+	
+	std::vector<const std::type_info *> types = {&typeid(minecraft::varint), &typeid(minecraft::uuid), &typeid(minecraft::varint), 
+		&typeid(double), &typeid(double), &typeid(double), &typeid(char), &typeid(char), &typeid(char), &typeid(minecraft::varint), 
+		&typeid(short), &typeid(short), &typeid(short)};
+	
+	std::vector<std::any> values = {(minecraft::varint){.num = user.get_socket()}, (minecraft::uuid){.data = user.get_uuid().bytes()},
+		(minecraft::varint){.num = 124}, pos.x, pos.y, pos.z, (char)(pos.pitch * 360.0 / 256.0), (char)(pos.yaw * 360.0 / 256.0),
+		(char)(pos.yaw * 360.0 / 256.0), (minecraft::varint){.num = 0}, (short)0, (short)0, (short)0};
+	
+	for (auto& value: users)
+	{
+		if (value.first == user.get_socket() || value.second.get_state() != 10)
+			continue;
+		pkt_send(types, values, value.second, 0x01);
+	}
+}
+
+void update_pos_to_users(User user, position pos, bool on_ground)
+{
+	position prev_pos = user.get_position();
+
+	std::vector<const std::type_info *> types = {&typeid(minecraft::varint), &typeid(short), &typeid(short), &typeid(short), &typeid(bool)};
+
+	std::vector<std::any> values = {(minecraft::varint){.num = (unsigned long)user.get_socket()}, (short)((pos.x * 32 - prev_pos.x * 32) * 128),
+	(short)((pos.y * 32 - prev_pos.y * 32) * 128), (short)((pos.z * 32 - prev_pos.z * 32) * 128),on_ground};
+
+	for (auto& value: users)
+	{
+		if (value.first == user.get_socket() || value.second.get_state() != 10)
+			continue;
+		pkt_send(types, values, value.second, 0x2C);
+	}
+}
+
+void update_pos_rot_to_users(User user, position pos, bool on_ground)
+{
+	position prev_pos = user.get_position();
+
+	std::vector<const std::type_info *> types = {&typeid(minecraft::varint), &typeid(short), &typeid(short), &typeid(short), 
+	&typeid(char), &typeid(char),&typeid(bool)};
+
+	std::vector<std::any> values = {(minecraft::varint){.num = (unsigned long)user.get_socket()}, (short)((pos.x * 32 - prev_pos.x * 32) * 128),
+	(short)((pos.y * 32 - prev_pos.y * 32) * 128), (short)((pos.z * 32 - prev_pos.z * 32) * 128),  (char)(pos.yaw * 360.0 / 256.0), 
+	(char)(pos.pitch * 360.0 / 256.0),on_ground};
+
+	for (auto& value: users)
+	{
+		if (value.first == user.get_socket() || value.second.get_state() != 10)
+			continue;
+		pkt_send(types, values, value.second, 0x2C);
+		pkt_send({&typeid(minecraft::varint), &typeid(char)}, 
+		{(minecraft::varint){.num = (unsigned long)user.get_socket()}, (char)(pos.yaw * 360.0 / 256.0)}, value.second, 0x46);
+	}
+	
+}
 
 int execute_pkt(packet p, int state, User &user, int index)
 {
@@ -455,6 +534,8 @@ int execute_pkt(packet p, int state, User &user, int index)
 				send_tab();
 				system_chat(std::format("§e{} connected", user.get_uname()));
 				commands(user);
+				spawn_entities_to_user(user);
+				spawn_user_to_users(user);
 				//game_event(13, 0.0f, user);
 				ret = 10;
 			}
@@ -526,17 +607,23 @@ int execute_pkt(packet p, int state, User &user, int index)
 			if (state == 10)
 			{
 				char *ptr = p.data;
+				bool on_ground = true;
 				position pos = user.get_position();
 				pos.x = read_double(ptr);
 				ptr = ptr + sizeof(double);
 				pos.y = read_double(ptr);
 				ptr = ptr + sizeof(double);
 				pos.z = read_double(ptr);
+				ptr = ptr + sizeof(double);
+				on_ground = *ptr;
 				pos.yaw = pos.yaw;
 				pos.pitch = pos.pitch;
+				update_pos_to_users(user, pos, on_ground);
 				user.update_position(pos);
 				log_header();
 				std::cout << "New pos: x: " << pos.x << " y: " << pos.y << " z: " << pos.z << " yaw: " << pos.yaw << " pitch: " << pos.pitch << std::endl;
+				pkt_send({&typeid(long)},{(long)0},user, 0x24);
+				
 				/*if (pos.y <= 500.0f)
 				{
 					pkt_send(
@@ -556,6 +643,7 @@ int execute_pkt(packet p, int state, User &user, int index)
 			{
 				char *ptr = p.data;
 				position pos = user.get_position();
+				bool on_ground = true;
 				pos.x = read_double(ptr);
 				ptr = ptr + sizeof(double);
 				pos.y = read_double(ptr);
@@ -565,6 +653,9 @@ int execute_pkt(packet p, int state, User &user, int index)
 				pos.yaw = read_float(ptr);
 				ptr = ptr + sizeof(float);
 				pos.pitch = read_float(ptr);
+				ptr = ptr + sizeof(double);
+				on_ground = *ptr;
+				update_pos_to_users(user, pos, on_ground);
 				user.update_position(pos);
 				log_header();
 				std::cout << "New pos2: x: " << pos.x << " y: " << pos.y << " z: " << pos.z << " yaw: " << pos.yaw << " pitch: " << pos.pitch << std::endl;
@@ -670,11 +761,12 @@ User read_ev(char *pkt, int sock, User user)
 	auto t1 = high_resolution_clock::now();
 	packets_to_process = process_packet(pkt);
 	int state = user.get_state();
-	log("State", state);
-	log("Size: ", users.size());
+	
+	//log("State", state);
+	//log("Size: ", users.size());
 	for (int i = 0; i < packets_to_process.size(); i++)
 	{
-		log("********************");
+		/*log("********************");
 		log("New packet");
 		log("Id: ", packets_to_process[i].id);
 		log("Size: ", packets_to_process[i].size);
@@ -687,20 +779,20 @@ User read_ev(char *pkt, int sock, User user)
 			else
 				printf("%02hhX ", (int)packets_to_process[i].data[x]);
 		}
-		std::cout << "\n";
+		std::cout << "\n";*/
 		state = execute_pkt(packets_to_process[i], state, user, 0);
 		log(state);
 		user.set_state(state);
 		free(packets_to_process[i].data);
 	}
-	auto t2 = high_resolution_clock::now();
-	auto ms_int = duration_cast<milliseconds>(t2 - t1);
+	/*auto t2 = high_resolution_clock::now();
+	auto ms_int = duration_cast<milliseconds>(t2 - t1);*/
 
 	/* Getting number of milliseconds as a double. */
-	duration<double, std::milli> ms_double = t2 - t1;
+	/*duration<double, std::milli> ms_double = t2 - t1;
 	log_header();
 	std::cout << "Time to process: ";
-	std::cout << ms_double.count() << "ms\n";
+	std::cout << ms_double.count() << "ms\n";*/
 	return user;
 }
 

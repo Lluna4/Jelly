@@ -171,7 +171,8 @@ void pkt_send(std::vector<const std::type_info*> types, std::vector<std::any> va
 		else if (types[i]->hash_code() == typeid(short).hash_code())
 		{
 			short a = std::any_cast<short>(values[i]);
-			send(fd, &a, sizeof(short), 0);
+			short conv = htobe16((*(uint16_t *)&a));
+			send(fd, &conv, sizeof(short), 0);
 		}
 		else if (types[i]->hash_code() == typeid(unsigned char).hash_code())
 		{
