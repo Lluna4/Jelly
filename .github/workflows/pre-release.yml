@@ -14,8 +14,9 @@ jobs:
     steps:
       # ...
       - name: "Build"
+        working-directory: ./build
         run: |
-          cd build && cmake .. && cmake && cmake --build .
+            cmake .. && cmake && cmake --build .
 
       - uses: "marvinpinto/action-automatic-releases@latest"
         with:
