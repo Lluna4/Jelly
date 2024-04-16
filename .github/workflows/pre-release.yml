@@ -15,7 +15,7 @@ jobs:
       # ...
       - name: "Build"
         run: |
-          cd build && cmake .. && cmake && cmake --build ."
+          cd build && cmake .. && cmake && cmake --build .
 
       - uses: "marvinpinto/action-automatic-releases@latest"
         with:
