@@ -136,7 +136,12 @@ void config(int sock, User user)
 {
 	std::string pack;
 	std::string features = "minecraft:vanilla";
-
+	std::string channel = "minecraft:brand";
+	std::string sv_name = "Jelly";
+	
+	pkt_send({&typeid(minecraft::string), &typeid(minecraft::string)}, 
+		{(minecraft::string){.len = channel.length(), .string = channel}, (minecraft::string){.len = sv_name.length(), .string = sv_name}},
+		user, 0x00);
 	pkt_send({&typeid(minecraft::varint), &typeid(minecraft::string)}, {(minecraft::varint){.num = 0x01}, (minecraft::string){.len = features.length(), .string= features}}, user, 0x08);
 	pack.push_back(0x01);
 	pack.push_back(0x02);
@@ -901,6 +906,7 @@ int main()
 	log("World generated!");
 	std::thread read_l(read_loop, epfd);
 	read_l.detach();
+	
 	while (1)
 	{
 		int client_fd = 0;

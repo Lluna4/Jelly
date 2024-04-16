@@ -131,6 +131,11 @@ void pkt_send(std::vector<const std::type_info*> types, std::vector<std::any> va
 			int conv = htobe32((*(uint32_t *)&a));
 			send(fd, &conv, sizeof(int), 0);
 		}
+		else if (types[i]->hash_code() == typeid(std::string).hash_code())
+		{
+			std::string a = std::any_cast<std::string>(values[i]);
+			send(fd, a.c_str(), a.length(), 0);
+		}
 		else if (types[i]->hash_code() == typeid(unsigned int).hash_code())
 		{
 			unsigned int a = std::any_cast<unsigned int>(values[i]);
