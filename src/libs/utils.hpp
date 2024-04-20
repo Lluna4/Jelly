@@ -3,6 +3,7 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <vector>
+#include <openssl/evp.h>
 #include <cstdint>
 
 struct packet
@@ -153,10 +154,22 @@ namespace minecraft
 		unsigned long num;
 	};
 
-	struct uuid
-	{
-		std::string data;
+	struct uuid {
+		unsigned char *buff = (unsigned char *)calloc(17, sizeof(char));
+		std::string uuid;
+		unsigned int len = 0;
+
+		void generate(std::string uname) 
+		{
+			EVP_MD_CTX *mdctx = EVP_MD_CTX_create();
+			int ret = EVP_DigestInit_ex(mdctx, EVP_md5(), NULL);
+			EVP_DigestUpdate(mdctx, uname.c_str(), uname.length());
+			EVP_DigestFinal_ex(mdctx, buff, &len);
+			EVP_MD_CTX_destroy(mdctx); // Clean up context
+			std::string buf((char *)buff);
+		}
 	};
+
 	struct string_tag
 	{
 		short len;

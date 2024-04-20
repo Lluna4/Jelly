@@ -15,6 +15,7 @@
 #include "libs/test_epoll.hpp"
 #include <sys/epoll.h>
 #include "libs/world_gen.hpp"
+#include <openssl/evp.h>
 #if defined(__linux__)
 #  include <endian.h>
 #elif defined(__FreeBSD__) || defined(__NetBSD__)
@@ -94,7 +95,7 @@ void send_tab()
 	{
 		std::string formatted_name = std::format("{} [{}]", value.second.get_uname() ,value.second.get_pronouns());
 		std::vector<const std::type_info *> buf = {&typeid(minecraft::uuid), &typeid(minecraft::string), &typeid(minecraft::varint), &typeid(bool),&typeid(bool), &typeid(minecraft::string_tag)};
-		std::vector<std::any> val = {(minecraft::uuid){.data = value.second.get_uuid().bytes()},(minecraft::string){.len = value.second.get_uname().length(), .string = value.second.get_uname()}, (minecraft::varint){.num = 0}, true, true,(minecraft::string_tag){.len = (short)formatted_name.length(), .string = formatted_name}};
+		std::vector<std::any> val = {(minecraft::uuid)value.second.get_uuid(),(minecraft::string){.len = value.second.get_uname().length(), .string = value.second.get_uname()}, (minecraft::varint){.num = 0}, true, true,(minecraft::string_tag){.len = (short)formatted_name.length(), .string = formatted_name}};
 		types.insert(types.end(), buf.begin(), buf.end());
 		values.insert(values.end(), val.begin(), val.end());
 	}
@@ -113,7 +114,7 @@ void remove_tab(User user)
 				&typeid(minecraft::varint), &typeid(minecraft::uuid)
 			},
 			{
-				(minecraft::varint){.num = 1}, (minecraft::uuid){.data = user.get_uuid().bytes()}
+				(minecraft::varint){.num = 1}, (minecraft::uuid)user.get_uuid()
 			}, value.second, 0x3B);
 	}
 }
@@ -123,13 +124,13 @@ void login_succ(User user)
 	std::string pkt;
 	WriteUleb128(pkt, user.get_uname().length() + 16 + 3);
 	pkt.push_back(0x02);
-	pkt.append(user.get_uuid().bytes());
+	pkt.append(user.get_uuid().uuid);
 	pkt.push_back(user.get_uname().length());
 	pkt.append(user.get_uname());
 	WriteUleb128(pkt, 0x00);
 	send(user.get_socket(), pkt.c_str(), pkt.length(), 0);
 	log_header();
-	std::cout <<  user.get_uname().length() + 16 + 3 << 4 << user.get_uuid().str() << user.get_uname().length() << user.get_uname() << 0 << std::endl;
+	std::cout <<  user.get_uname().length() + 16 + 3 << 4 << user.get_uuid().uuid << user.get_uname().length() << user.get_uname() << 0 << std::endl;
 }
 
 void config(int sock, User user)
@@ -313,7 +314,7 @@ void spawn_entities_to_user(User user)
 			&typeid(double), &typeid(double), &typeid(double), &typeid(char), &typeid(char), &typeid(char), &typeid(minecraft::varint), 
 			&typeid(short), &typeid(short), &typeid(short)};
 		
-		std::vector<std::any> values = {(minecraft::varint){.num = value.first}, (minecraft::uuid){.data = value.second.get_uuid().bytes()},
+		std::vector<std::any> values = {(minecraft::varint){.num = value.first}, (minecraft::uuid)value.second.get_uuid(),
 			(minecraft::varint){.num = 124}, pos.x, pos.y, pos.z, (char)(pos.pitch * 360.0 / 256.0), (char)(pos.yaw * 360.0 / 256.0),
 			(char)(pos.yaw * 360.0 / 256.0), (minecraft::varint){.num = 0}, (short)0, (short)0, (short)0};
 		
@@ -329,7 +330,7 @@ void spawn_user_to_users(User user)
 		&typeid(double), &typeid(double), &typeid(double), &typeid(char), &typeid(char), &typeid(char), &typeid(minecraft::varint), 
 		&typeid(short), &typeid(short), &typeid(short)};
 	
-	std::vector<std::any> values = {(minecraft::varint){.num = user.get_socket()}, (minecraft::uuid){.data = user.get_uuid().bytes()},
+	std::vector<std::any> values = {(minecraft::varint){.num = user.get_socket()}, (minecraft::uuid)user.get_uuid(),
 		(minecraft::varint){.num = 124}, pos.x, pos.y, pos.z, (char)(pos.pitch * 360.0 / 256.0), (char)(pos.yaw * 360.0 / 256.0),
 		(char)(pos.yaw * 360.0 / 256.0), (minecraft::varint){.num = 0}, (short)0, (short)0, (short)0};
 	
@@ -409,6 +410,9 @@ int execute_pkt(packet p, int state, User &user, int index)
 					log("Read from file!");
 				}
 				user.set_uname(uname);
+				minecraft::uuid uuid_new;
+				uuid_new.generate(uname);
+				user.set_uuid(uuid_new);
 				connected++;
 				pkt_send(
 					{
@@ -417,7 +421,7 @@ int execute_pkt(packet p, int state, User &user, int index)
 						&typeid(minecraft::varint)
 					},
 					{
-						(minecraft::uuid){.data = user.get_uuid().bytes()},
+						(minecraft::uuid)user.get_uuid(),
 						(minecraft::string){.len = uname.length(), .string = uname},
 						(minecraft::varint){.num = 0}
 					},

@@ -119,7 +119,7 @@ void pkt_send(std::vector<const std::type_info*> types, std::vector<std::any> va
 		size = calc_len(types, values);
 	else
 		size = calc_len(types, values) + 1;
-	std::cout << size << std::endl;
+	//std::cout << size << std::endl;
 	if (headless == false)
 		send_varint(fd, size);
 		send_varint(fd, id);
@@ -224,7 +224,7 @@ void pkt_send(std::vector<const std::type_info*> types, std::vector<std::any> va
 		else if (types[i]->hash_code() == typeid(minecraft::uuid).hash_code())
 		{
 			struct minecraft::uuid str = std::any_cast<minecraft::uuid>(values[i]);
-			send(fd, str.data.c_str(), str.data.length(), 0);
+			send(fd, str.buff, str.len, 0);
 		}
 		else if (types[i]->hash_code() == typeid(minecraft::varint).hash_code())
 		{

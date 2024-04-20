@@ -6,8 +6,7 @@
 #include <string>
 #include "tokenize.hpp"
 #include "logging.hpp"
-#include <uuid_v4/uuid_v4.h>
-#include <uuid_v4/endianness.h>
+#include "utils.hpp"
 
 /*
 struct uuid
@@ -42,8 +41,6 @@ class User
     public:
         User() 
         {
-            UUIDv4::UUIDGenerator<std::mt19937_64> uuidGenerator;
-            uuid = uuidGenerator.getUUID();
             pos = {.x = 0.0f, .y = 64.0f, .z = 0.0f, .yaw = 0.0f, .pitch = 0.0f};
             pronouns = "they/them";
             state = 0;
@@ -53,17 +50,16 @@ class User
         User(std::string uname, int socket)
             :uname_(uname), socket_(socket)
         {
-            UUIDv4::UUIDGenerator<std::mt19937_64> uuidGenerator;
-            uuid = uuidGenerator.getUUID();
+            uuid_.generate(uname_);
             pos = {.x = 0.0f, .y = 64.0f, .z = 0.0f, .yaw = 0.0f, .pitch = 0.0f};
             pronouns = "they/them";
             state = 0;
             on_ground == true;
         }
 
-        UUIDv4::UUID get_uuid()
+        minecraft::uuid get_uuid()
         {
-            return uuid;
+            return uuid_;
         }
 
         std::string get_uname()
@@ -108,9 +104,9 @@ class User
         {
             on_ground = set;
         }
-        void set_uuid(UUIDv4::UUID uuid_)
+        void set_uuid(minecraft::uuid uuid)
         {
-            uuid = uuid_;
+            uuid_ = uuid;
         }
 
         void set_uname(std::string uname)
@@ -151,7 +147,7 @@ class User
         void to_file()
         {
             std::ofstream file(uname_);
-            file << uuid.str() << std::endl;
+            file << uuid_.buff << std::endl;
             file << locale << std::endl;
             file << render_distance << std::endl;
             file << pos.pitch << "," << pos.yaw << "," << pos.x << "," << pos.y << "," << pos.z << std::endl;
@@ -170,7 +166,7 @@ class User
                 switch (index)
                 {
                 case 0:
-                    uuid.fromStr(line.c_str());
+                    uuid_.uuid = line;
                     break;
                 case 1:
                     locale = line;
@@ -200,7 +196,7 @@ class User
         }
 
     private:
-        UUIDv4::UUID uuid;
+        minecraft::uuid uuid_;
         std::string uname_;
         int socket_;
 	    std::string locale;
