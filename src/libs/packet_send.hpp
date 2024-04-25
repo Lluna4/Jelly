@@ -64,7 +64,11 @@ int calc_len(std::vector<const std::type_info*> types, std::vector<std::any> val
 		}
 		else if (types[i]->hash_code() == typeid(minecraft::string).hash_code())
 		{
-			size += std::any_cast<minecraft::string>(values[i]).len + 1;
+			minecraft::string str = std::any_cast<minecraft::string>(values[i]);
+			std::string buf;
+			std::size_t len = 0;
+			len = WriteUleb128(buf ,str.len);
+			size += std::any_cast<minecraft::string>(values[i]).string.length() + len;
 		}
 		else if (types[i]->hash_code() == typeid(minecraft::string_tag).hash_code())
 		{
@@ -119,7 +123,7 @@ void pkt_send(std::vector<const std::type_info*> types, std::vector<std::any> va
 		size = calc_len(types, values);
 	else
 		size = calc_len(types, values) + 1;
-	//std::cout << size << std::endl;
+	std::cout << size << std::endl;
 	if (headless == false)
 		send_varint(fd, size);
 		send_varint(fd, id);

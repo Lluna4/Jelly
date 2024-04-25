@@ -5,6 +5,9 @@
 #include <vector>
 #include <openssl/evp.h>
 #include <cstdint>
+#include <filesystem>
+#include <fstream>
+#include <bitset>
 
 struct packet
 {
@@ -278,4 +281,70 @@ void send_string(int fd, minecraft::string str)
 {
 	send_varint(fd, str.len);
 	send(fd, str.string.c_str(), str.string.length(), 0);
+}
+
+static std::vector<std::bitset<6>> proc_6bit(std::string hi)
+{
+    std::string bits;
+    std::vector<std::bitset<8>> vec;
+    std::vector<std::bitset<6>> vec2;
+    int index = 0;
+    std::string res;
+    for (int i = 0; i < hi.length(); i++)
+    {
+        vec.emplace_back(hi[i]);
+    }
+    for (int i = 0; i < vec.size(); i++)
+        bits.append(vec[i].to_string());
+
+    while(index < bits.length())
+    {
+        if (index > 0 && index%6 == 0)
+        {
+            vec2.emplace_back(res);
+            res.clear();
+        }
+        res.push_back(bits[index]);
+        index++;
+    }
+	while (res.length() < 6)
+		res.push_back('0');
+	vec2.emplace_back(res);
+	
+	return vec2;
+}
+
+std::string base64_encode(std::string file_path)
+{
+	std::string ret;
+	if (std::filesystem::exists(file_path))
+	{
+		std::ifstream file(file_path, std::ios::binary);
+		std::string buf;
+		std::stringstream buffer;
+		buffer << file.rdbuf();
+		buf = buffer.str();
+		std::vector<std::bitset<6>>nums = proc_6bit(buf); //converts 8 bit nums into a 6 bit array
+
+		for (int i = 0; i < nums.size();i++)
+		{
+			unsigned long num = nums[i].to_ulong();
+			if (num < 26)
+				ret.push_back(num+ 'A');
+			else if (num >= 26 && num < 52)
+				ret.push_back((num - 26) + 'a');
+			else if(num >= 52 && num < 62)
+				ret.push_back((num - 52) + '0');
+			else if (num == 62)
+				ret.push_back('+');
+			else if (num == 63)
+				ret.push_back('/');
+		}
+		if (ret.length()%4 != 0)
+		{
+			while(ret.length()%4 != 0)
+				ret.push_back('=');
+		}
+	}
+	return ret;
 }

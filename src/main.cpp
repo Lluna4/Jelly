@@ -12,6 +12,8 @@
 #include <format>
 #include <unordered_map>
 #include <nlohmann/json.hpp>
+#include <iterator>
+#include <fstream>
 #include "libs/test_epoll.hpp"
 #include <sys/epoll.h>
 #include "libs/world_gen.hpp"
@@ -166,7 +168,10 @@ void registry_data(User user)
 void status_response(User user)
 {
 	std::string response_str;
-	json response ={
+	json response;
+	json fav;
+	std::string base64 = std::format("data:image/png;base64,{}", base64_encode(icon_path));
+	response ={
 		{"version", {
 			{"name", "1.20.4"},
 			{"protocol", 765}
@@ -175,12 +180,13 @@ void status_response(User user)
 			{"max", 20},
 			{"online", connected}
 		}},
-		{"description",
-		{
+		{"description", {
 			{"text", motd}
-		}}
+		}},
+		{"favicon", base64}
 	};
 	response_str = response.dump();
+	std::cout << response_str << std::endl;
 	pkt_send(
 		{
 			&typeid(minecraft::string)
@@ -771,11 +777,11 @@ User read_ev(char *pkt, int sock, User user)
 	packets_to_process = process_packet(pkt);
 	int state = user.get_state();
 	
-	//log("State", state);
-	//log("Size: ", users.size());
+	log("State", state);
+	log("Size: ", users.size());
 	for (int i = 0; i < packets_to_process.size(); i++)
 	{
-		/*log("********************");
+		log("********************");
 		log("New packet");
 		log("Id: ", packets_to_process[i].id);
 		log("Size: ", packets_to_process[i].size);
@@ -788,20 +794,19 @@ User read_ev(char *pkt, int sock, User user)
 			else
 				printf("%02hhX ", (int)packets_to_process[i].data[x]);
 		}
-		std::cout << "\n";*/
+		std::cout << "\n";
 		state = execute_pkt(packets_to_process[i], state, user, 0);
 		log(state);
 		user.set_state(state);
 		free(packets_to_process[i].data);
 	}
-	/*auto t2 = high_resolution_clock::now();
-	auto ms_int = duration_cast<milliseconds>(t2 - t1);*/
+	auto t2 = high_resolution_clock::now();
+	auto ms_int = duration_cast<milliseconds>(t2 - t1);
 
-	/* Getting number of milliseconds as a double. */
-	/*duration<double, std::milli> ms_double = t2 - t1;
+	duration<double, std::milli> ms_double = t2 - t1;
 	log_header();
 	std::cout << "Time to process: ";
-	std::cout << ms_double.count() << "ms\n";*/
+	std::cout << ms_double.count() << "ms\n";
 	return user;
 }
 

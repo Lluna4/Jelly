@@ -1,7 +1,6 @@
-#include "../libs/world_gen.hpp"
-#include <cstdint>
+#include "../libs/utils.hpp"
 
 int main()
 {
-    world_gen();
+    std::cout << base64_encode("favicon.png") << std::endl;
 }

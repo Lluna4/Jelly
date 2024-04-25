@@ -10,7 +10,6 @@ set(JSON_BuildTests OFF CACHE INTERNAL "")
 
 # Add the third-party library (nlohmann_json) as a subdirectory
 add_subdirectory(nlohmann_json)
-
 # Find and link the uuid_v4 library
 set(OPENSSL_USE_STATIC_LIBS TRUE)
 find_package(OpenSSL REQUIRED)

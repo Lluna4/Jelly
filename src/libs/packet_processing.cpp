@@ -29,6 +29,13 @@ std::vector<packet> process_packet(char *pkt)
 		next = pkt + (p.size + 1);
 		pkt++;
         p.id = *pkt;
+		if (p.size < 0)
+		{
+			p.size = 0;
+			p.data = 0;
+			packets.push_back(p);
+			return packets;
+		}
 		data = (char *)calloc(p.size, sizeof(char));
 		pkt++;
 		std::memcpy(data, pkt, p.size - 1);
