@@ -109,6 +109,11 @@ int calc_len(std::vector<const std::type_info*> types, std::vector<std::any> val
 			minecraft::chunk chun = std::any_cast<minecraft::chunk>(values[i]);
 			size += chun.size();
 		}
+		else if (types[i]->hash_code() == typeid(minecraft::chunk_indirect).hash_code())
+		{
+			minecraft::chunk_indirect chun = std::any_cast<minecraft::chunk_indirect>(values[i]);
+			size += chun.size();
+		}
 	}
 	return size;
 }
@@ -123,7 +128,7 @@ void pkt_send(std::vector<const std::type_info*> types, std::vector<std::any> va
 		size = calc_len(types, values);
 	else
 		size = calc_len(types, values) + 1;
-	std::cout << size << std::endl;
+	//std::cout << size << std::endl;
 	if (headless == false)
 		send_varint(fd, size);
 		send_varint(fd, id);
@@ -305,6 +310,40 @@ void pkt_send(std::vector<const std::type_info*> types, std::vector<std::any> va
 				{
 					send(fd, &cont.block_indexes[i], sizeof(long), 0);
 				}*/
+				
+				minecraft::paletted_container cont2 = chun.chunks[x].biome;
+
+				send(fd, &cont2.bits_per_entry, sizeof(unsigned char), 0);
+				//send_varint(fd, cont2.palette_data_entries.num);
+				send_varint(fd, cont2.block_ids[0].num);
+				send_varint(fd, cont2.data_lenght.num);
+
+				/*for (int i = 0; i < cont2.block_indexes.size(); i++)
+				{
+					send(fd, &cont2.block_indexes[i], sizeof(long), 0);
+				}*/
+			}
+		}
+		else if (types[i]->hash_code() == typeid(minecraft::chunk_indirect).hash_code())
+		{
+			minecraft::chunk_indirect chun = std::any_cast<minecraft::chunk_indirect>(values[i]);
+
+			for (int x = 0; x < chun.chunks.size(); x++)
+			{
+				chun.chunks[x].block_count = htobe16(*(uint16_t*)&chun.chunks[x].block_count);
+				send(fd, &chun.chunks[x].block_count, sizeof(short), 0);
+				minecraft::paletted_container_indirect cont = chun.chunks[x].blocks;
+
+				send(fd, &cont.bits_per_entry, sizeof(unsigned char), 0);
+				send_varint(fd, cont.palette_data_entries.num);
+				for (int i = 0; i < cont.block_ids.size(); i++)
+					send_varint(fd, cont.block_ids[i].num);
+				send_varint(fd, cont.data_lenght.num);
+
+				for (int i = 0; i < cont.block_indexes.size(); i++)
+				{
+					send(fd, &cont.block_indexes[i], sizeof(long), 0);
+				}
 				
 				minecraft::paletted_container cont2 = chun.chunks[x].biome;
 

@@ -114,6 +114,18 @@ float read_float(char *buf)
 	return num;
 }
 
+unsigned long read_position(char *buf)
+{
+	uint64_t num_as_uint64;
+	unsigned long num;
+
+	memcpy(&num_as_uint64, buf, sizeof(uint64_t));
+	num_as_uint64 = be64toh(num_as_uint64);
+	memcpy(&num, &num_as_uint64, sizeof(double));
+
+	return num;
+}
+
 char *mem_dup(char *buf, int size)
 {
 	char *ret = (char *)calloc(size, sizeof(char));
@@ -220,10 +232,27 @@ namespace minecraft
 		std::vector<long> block_indexes;
 	};
 
+	struct paletted_container_indirect
+	{
+		unsigned char bits_per_entry;
+		varint palette_data_entries;
+		std::vector<varint> block_ids;
+		varint data_lenght;
+		std::vector<long> block_indexes;
+		std::vector<std::bitset<4>> block_indexes_nums;
+	};
+
 	struct chunk_section
 	{
 		short block_count;
 		paletted_container blocks;
+		paletted_container biome;
+	};
+
+	struct chunk_section_indirect
+	{
+		short block_count;
+		paletted_container_indirect blocks;
 		paletted_container biome;
 	};
 
@@ -251,6 +280,47 @@ namespace minecraft
 				{
 					send(fd, &cont.block_indexes[i], sizeof(long), 0);
 				}*/
+				
+				minecraft::paletted_container cont2 = chunks[x].biome;
+
+				ret += sizeof(unsigned char);
+
+				ret += WriteUleb128(buf, cont2.block_ids[0].num);
+
+				ret += WriteUleb128(buf, cont2.data_lenght.num);
+
+				/*for (int i = 0; i < cont2.block_indexes.size(); i++)
+				{
+					send(fd, &cont2.block_indexes[i], sizeof(long), 0);
+				}*/
+			}
+			return ret;
+		}
+	};
+
+	struct chunk_indirect
+	{
+		std::vector<chunk_section_indirect> chunks;
+
+		int size()
+		{
+			int ret = 0;
+			std::string buf;
+			std::size_t size = 0;
+			for (int x = 0; x < chunks.size(); x++)
+			{
+				ret += sizeof(short);
+				minecraft::paletted_container_indirect cont = chunks[x].blocks;
+
+				ret += sizeof(unsigned char);
+
+				ret += WriteUleb128(buf, cont.palette_data_entries.num);
+				for (int i = 0; i < cont.block_ids.size(); i++)
+					ret += WriteUleb128(buf, cont.block_ids[i].num);
+
+				ret += WriteUleb128(buf, cont.data_lenght.num);
+
+				ret += (sizeof(long) * cont.block_indexes.size());
 				
 				minecraft::paletted_container cont2 = chunks[x].biome;
 
@@ -347,4 +417,16 @@ std::string base64_encode(std::string file_path)
 		}
 	}
 	return ret;
+}
+
+std::bitset<26> reverse16(std::bitset<26> set)
+{
+    int n = static_cast<int>(set.to_ulong());
+    return std::bitset<26>((n >> 13) | (n << 13));
+}
+
+std::bitset<12> reverse16(std::bitset<12> set)
+{
+    int n = static_cast<int>(set.to_ulong());
+    return std::bitset<12>((n >> 6) | (n << 6));
 }

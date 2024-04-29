@@ -18,6 +18,7 @@
 #include <sys/epoll.h>
 #include "libs/world_gen.hpp"
 #include <openssl/evp.h>
+#include <bitset>
 #if defined(__linux__)
 #  include <endian.h>
 #elif defined(__FreeBSD__) || defined(__NetBSD__)
@@ -34,7 +35,7 @@ int connected = 0;
 int epfd = 0;
 
 
-std::vector<minecraft::chunk> spawn_chunks;
+std::vector<minecraft::chunk_indirect> spawn_chunks;
 std::unordered_map<int, User> users;
 minecraft::chunk empty_chunk;
 
@@ -285,7 +286,7 @@ void send_mock_chunk(User user, int x = 0, int y = 0)
 {
 	minecraft::varint size = {.num = spawn_chunks[0].size()};
 	std::vector<const std::type_info *> types = {&typeid(int), &typeid(int), &typeid(char), &typeid(char), &typeid(minecraft::varint), 
-		&typeid(minecraft::chunk), &typeid(minecraft::varint), &typeid(minecraft::varint), &typeid(long),
+		&typeid(minecraft::chunk_indirect), &typeid(minecraft::varint), &typeid(minecraft::varint), &typeid(long),
 		&typeid(minecraft::varint), &typeid(long),&typeid(minecraft::varint),
 		&typeid(long),&typeid(minecraft::varint), &typeid(long), &typeid(minecraft::varint), &typeid(minecraft::varint)};
 	std::vector<std::any> values = {x, y, (char)0x0a, (char)0x00, size, spawn_chunks[0],
@@ -296,7 +297,7 @@ void send_mock_chunk(User user, int x = 0, int y = 0)
 
 void send_empty_chunk(User user, int x = 0, int y = 0)
 {
-	minecraft::varint size = {.num = spawn_chunks[0].size()};
+	minecraft::varint size = {.num = empty_chunk.size()};
 	std::vector<const std::type_info *> types = {&typeid(int), &typeid(int), &typeid(char), &typeid(char), &typeid(minecraft::varint), 
 		&typeid(minecraft::chunk), &typeid(minecraft::varint), &typeid(minecraft::varint), &typeid(long),
 		&typeid(minecraft::varint), &typeid(long),&typeid(minecraft::varint),
@@ -689,82 +690,55 @@ int execute_pkt(packet p, int state, User &user, int index)
 				}*/
 			}
 			break;
+		case 0x35:
+			if (state == 10)
+			{
+				char *ptr = p.data;
+				ptr++;
+				unsigned long val = read_position(ptr);
+
+				std::int32_t x = val >> 38;
+				std::int32_t y = val << 52 >> 52;
+				std::int32_t z = val << 26 >> 38;
+
+				x = x & 15;
+				y = y - 63;
+				z = z & 15;
+
+				log(val);
+				log("x: ", x);
+				log("y: ", y);
+				log("z: ", z);
+
+				std::vector<std::bitset<4>> chunk = spawn_chunks[0].chunks[8].blocks.block_indexes_nums;
+				std::bitset<4> new_block;
+				new_block.reset();
+				new_block.set(0, true);
+
+				chunk[((y*256) + (z*16) + x) - 1] = new_block;
+				std::vector<long> longs;
+				for (int i = 0; i < chunk.size(); i += 16)
+				{
+					longs.push_back((long)concat(chunk, i, (((y*256) + (z*16) + x) - 1), new_block).to_ulong());
+				}
+				spawn_chunks[0].chunks[8].blocks.block_indexes = longs;	
+				spawn_chunks[0].chunks[8].block_count++;
+				spawn_chunks[0].chunks[8].blocks.block_indexes_nums = chunk;
+				for (int xx = -17; xx < 17; xx++)
+				{
+					for (int zz = -17; zz <= 17; zz++)
+					{
+						if (abs(xx) == 17 || abs(zz) == 17)
+							send_empty_chunk(user, xx, zz);
+						else
+							send_mock_chunk(user, xx, zz);
+					}
+				}
+			}
+			break;
 	}
 	return ret;
 }
-
-/*void manage_client(int sock)
-{
-	using std::chrono::high_resolution_clock;
-	using std::chrono::duration_cast;
-	using std::chrono::duration;
-	using std::chrono::milliseconds;
-	int rd_status = 0;
-	int size = 0;
-	int state = 0;
-	bool closed = false;
-	char *buffer = (char *)calloc(1025, sizeof(char));
-	char *pkt = (char *)calloc(1025, sizeof(char));
-	std::vector<packet> packets_to_process;
-	User user;
-	//users.push_back(user);
-	user.set_socket(sock);
-	bool first = true;
-
-	while (1)
-	{
-	do
-	{
-		rd_status = recv(sock, buffer, 1024, 0);
-		if (rd_status == -1 || rd_status == 0)
-		{
-			close(sock);
-			if (connected > 0)
-				connected--;
-			log("Thread closed");
-			return;
-		}
-		memcpy(&pkt[size], buffer, rd_status);
-		size += rd_status;
-		log((int)pkt[0]);
-	}
-	while (size < pkt[0]);
-		auto t1 = high_resolution_clock::now();
-		packets_to_process = process_packet(pkt);
-		for (int i = 0; i < packets_to_process.size(); i++)
-		{
-			log("********************");
-			log("New packet");
-			log("Id: ", packets_to_process[i].id);
-			log("Size: ", packets_to_process[i].size);
-			log_header();
-			std::cout << "Data: ";
-			for (int x = 0; x < packets_to_process[i].size; x++)
-			{
-				if (isalnum(packets_to_process[i].data[x]))
-					printf("%c ", packets_to_process[i].data[x]);
-				else
-					printf("%02hhX ", (int)packets_to_process[i].data[x]);
-			}
-			std::cout << "\n";
-			state = execute_pkt(packets_to_process[i], state, user);
-			free(packets_to_process[i].data);
-		}
-		auto t2 = high_resolution_clock::now();
-		auto ms_int = duration_cast<milliseconds>(t2 - t1);
-
-		/* Getting number of milliseconds as a double. */
-		/*duration<double, std::milli> ms_double = t2 - t1;
-		log_header();
-		std::cout << "Time to process: ";
-		std::cout << ms_double.count() << "ms\n";
-		packets_to_process.clear();
-		memset(buffer, 0, 1025);
-		memset(pkt, 0, 1025);
-		size = 0;
-	}
-	close(sock);
-}*/
 
 User read_ev(char *pkt, int sock, User user)
 {
@@ -889,14 +863,18 @@ int main()
 	int ii = 0;
 	while (ii < 6)
 	{
-		minecraft::chunk chunks;
+		minecraft::chunk_indirect chunks;
 		while (in < 24)
 		{
-			minecraft::chunk_section new_chunk;
+			minecraft::chunk_section_indirect new_chunk;
 			if (in < 8)
-				new_chunk = {.block_count = 4096, .blocks = world_gen(), .biome = biome_gen()};
+			{
+				new_chunk = {.block_count = 4096, .blocks = world_gen_inderect(), .biome = biome_gen()};
+				if (in == 7)
+					new_chunk = {.block_count = 4096, .blocks = world_gen_inderect(true), .biome = biome_gen()};
+			}
 			else
-				new_chunk = {.block_count = 0, .blocks = world_gen_empty(), .biome = biome_gen()};
+				new_chunk = {.block_count = 0, .blocks = world_gen_inderect_empty(), .biome = biome_gen()};
 			chunks.chunks.push_back(new_chunk);
 			in++;
 		}
