@@ -387,7 +387,6 @@ void update_pos_rot_to_users(User user, position pos, bool on_ground)
 	}
 	
 }
-
 int execute_pkt(packet p, int state, User &user, int index)
 {
 	int ret = state;
@@ -696,11 +695,14 @@ int execute_pkt(packet p, int state, User &user, int index)
 				char *ptr = p.data;
 				ptr++;
 				unsigned long val = read_position(ptr);
+				std::int32_t orig_x, orig_z;
 
 				std::int32_t x = val >> 38;
 				std::int32_t y = val << 52 >> 52;
 				std::int32_t z = val << 26 >> 38;
-
+				
+				orig_x = x;
+				orig_z = z;
 				x = x & 15;
 				y = y - 63;
 				z = z & 15;
@@ -711,20 +713,26 @@ int execute_pkt(packet p, int state, User &user, int index)
 				log("z: ", z);
 
 				std::vector<std::bitset<4>> chunk = spawn_chunks[0].chunks[8].blocks.block_indexes_nums;
-				std::bitset<4> new_block;
-				new_block.reset();
-				new_block.set(0, true);
+				std::bitset<4> new_block(0x1);
 
 				chunk[((y*256) + (z*16) + x) - 1] = new_block;
 				std::vector<long> longs;
+    				std::string buf;
 				for (int i = 0; i < chunk.size(); i += 16)
 				{
-					longs.push_back((long)concat(chunk, i, (((y*256) + (z*16) + x) - 1), new_block).to_ulong());
+    					for (int x = i; x < (i + 16); x++)
+    					{
+            					buf = buf + chunk[x].to_string();
+    					}
+    					longs.push_back((long)std::bitset<64>(buf).to_ulong());
+					buf.clear();
 				}
+
 				spawn_chunks[0].chunks[8].blocks.block_indexes = longs;	
 				spawn_chunks[0].chunks[8].block_count++;
 				spawn_chunks[0].chunks[8].blocks.block_indexes_nums = chunk;
-				for (int xx = -17; xx < 17; xx++)
+				send_mock_chunk(user, orig_x/16, orig_z/16);
+				/*for (int xx = -17; xx < 17; xx++)
 				{
 					for (int zz = -17; zz <= 17; zz++)
 					{
@@ -733,7 +741,7 @@ int execute_pkt(packet p, int state, User &user, int index)
 						else
 							send_mock_chunk(user, xx, zz);
 					}
-				}
+				}*/
 			}
 			break;
 	}
