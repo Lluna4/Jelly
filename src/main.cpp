@@ -536,11 +536,11 @@ int execute_pkt(packet p, int state, User &user, int index)
 					user, 0x20
 				);
 				set_center_chunk(user);
-				for (int x = -17; x < 17; x++)
+				for (int x = -3; x < 3; x++)
 				{
-					for (int z = -17; z <= 17; z++)
+					for (int z = -3; z <= 3; z++)
 					{
-						if (abs(x) == 17 || abs(z) == 17)
+						if (abs(x) == 3 || abs(z) == 3)
 							send_empty_chunk(user, x, z);
 						else
 							send_mock_chunk(user, x, z);
@@ -637,7 +637,7 @@ int execute_pkt(packet p, int state, User &user, int index)
 				user.update_position(pos);
 				log_header();
 				std::cout << "New pos: x: " << pos.x << " y: " << pos.y << " z: " << pos.z << " yaw: " << pos.yaw << " pitch: " << pos.pitch << std::endl;
-				pkt_send({&typeid(long)},{(long)0},user, 0x24);
+				//pkt_send({&typeid(long)},{(long)0},user, 0x24);
 				
 				/*if (pos.y <= 500.0f)
 				{
@@ -674,7 +674,7 @@ int execute_pkt(packet p, int state, User &user, int index)
 				user.update_position(pos);
 				log_header();
 				std::cout << "New pos2: x: " << pos.x << " y: " << pos.y << " z: " << pos.z << " yaw: " << pos.yaw << " pitch: " << pos.pitch << std::endl;
-				pkt_send({&typeid(long)},{(long)0},user, 0x24);
+				//pkt_send({&typeid(long)},{(long)0},user, 0x24);
 				/*if (pos.y <= 500.0f)
 				{
 					pkt_send(
@@ -715,7 +715,7 @@ int execute_pkt(packet p, int state, User &user, int index)
 				std::vector<std::bitset<4>> chunk = spawn_chunks[0].chunks[8].blocks.block_indexes_nums;
 				std::bitset<4> new_block(0x1);
 
-				chunk[((y*256) + (z*16) + x) - 1] = new_block;
+				chunk[((y*256) + (z*16) + (x - 1))] = new_block;
 				std::vector<long> longs;
     				std::string buf;
 				for (int i = 0; i < chunk.size(); i += 16)
@@ -731,7 +731,10 @@ int execute_pkt(packet p, int state, User &user, int index)
 				spawn_chunks[0].chunks[8].blocks.block_indexes = longs;	
 				spawn_chunks[0].chunks[8].block_count++;
 				spawn_chunks[0].chunks[8].blocks.block_indexes_nums = chunk;
-				send_mock_chunk(user, orig_x/16, orig_z/16);
+				for (auto& value: users)
+				{
+					send_mock_chunk(value.second, orig_x/16, orig_z/16);
+				}
 				/*for (int xx = -17; xx < 17; xx++)
 				{
 					for (int zz = -17; zz <= 17; zz++)
@@ -746,6 +749,18 @@ int execute_pkt(packet p, int state, User &user, int index)
 			break;
 	}
 	return ret;
+}
+
+void keep_alive_event()
+{
+	for (auto& value: users)
+	{
+		if (value.second.get_state() == 10)
+		{
+			pkt_send({&typeid(long)}, {(long)0}, value.second, 0x24);
+		}
+	}
+	std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 }
 
 User read_ev(char *pkt, int sock, User user)
@@ -901,6 +916,8 @@ int main()
 	log("World generated!");
 	std::thread read_l(read_loop, epfd);
 	read_l.detach();
+	std::thread keep_alive(keep_alive_event);
+	keep_alive.detach();
 	
 	while (1)
 	{
