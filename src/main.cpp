@@ -714,17 +714,20 @@ int execute_pkt(packet p, int state, User &user, int index)
 
 				std::vector<std::bitset<4>> chunk = spawn_chunks[0].chunks[8].blocks.block_indexes_nums;
 				std::bitset<4> new_block(0x1);
-
-				chunk[((y*256) + (z*16) + (x - 1))] = new_block;
-				std::vector<long> longs;
-    				std::string buf;
+if (x%2 == 0)
+	x++;
+else
+	x--;
+				chunk[((y*256) + (z*16) + (x))] = new_block;
+				std::vector<unsigned long> longs;
+    			std::string buf;
 				for (int i = 0; i < chunk.size(); i += 16)
 				{
-    					for (int x = i; x < (i + 16); x++)
-    					{
-            					buf = buf + chunk[x].to_string();
-    					}
-    					longs.push_back((long)std::bitset<64>(buf).to_ulong());
+					for (int x = i; x < (i + 16); x++)
+					{
+							buf = buf + chunk[x].to_string();
+					}
+					longs.push_back(std::bitset<64>(buf).to_ulong());
 					buf.clear();
 				}
 

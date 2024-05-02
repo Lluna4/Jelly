@@ -238,7 +238,7 @@ namespace minecraft
 		varint palette_data_entries;
 		std::vector<varint> block_ids;
 		varint data_lenght;
-		std::vector<long> block_indexes;
+		std::vector<unsigned long> block_indexes;
 		std::vector<std::bitset<4>> block_indexes_nums;
 	};
 

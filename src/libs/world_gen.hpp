@@ -61,7 +61,7 @@ minecraft::paletted_container_indirect world_gen_inderect(bool surface = false)
     .data_lenght = (minecraft::varint){.num = 256}};
 
     int index = 0;
-    std::vector<long> longs;
+    std::vector<unsigned long> longs;
     std::vector<std::bitset<4>> numbers;
     int x = 0, y = 0, z = 0;
 
@@ -84,7 +84,7 @@ minecraft::paletted_container_indirect world_gen_inderect(bool surface = false)
     }
     for (int i = 0; i < numbers.size(); i += 16)
     {
-        longs.push_back((long)concat(numbers, i).to_ulong());
+        longs.push_back(concat(numbers, i).to_ulong());
     }
     ret.block_indexes = longs;
     ret.block_indexes_nums = numbers;
@@ -98,7 +98,7 @@ minecraft::paletted_container_indirect world_gen_inderect_empty()
     .data_lenght = (minecraft::varint){.num = 256}};
 
     int index = 0;
-    std::vector<long> longs;
+    std::vector<unsigned long> longs;
     std::vector<std::bitset<4>> numbers;
     int x = 0, y = 0, z = 0;
 
@@ -116,7 +116,7 @@ minecraft::paletted_container_indirect world_gen_inderect_empty()
     }
     for (int i = 0; i < numbers.size(); i += 16)
     {
-        longs.push_back((long)concat(numbers, i).to_ulong());
+        longs.push_back(concat(numbers, i).to_ulong());
     }
     ret.block_indexes = longs;
     ret.block_indexes_nums = numbers;
