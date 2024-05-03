@@ -342,7 +342,8 @@ void pkt_send(std::vector<const std::type_info*> types, std::vector<std::any> va
 
 				for (int i = 0; i < cont.block_indexes.size(); i++)
 				{
-					send(fd, &cont.block_indexes[i], sizeof(long), 0);
+					unsigned long conv = htobe64((*(uint64_t *)&cont.block_indexes[i]));
+					send(fd, &conv, sizeof(unsigned long), 0);
 				}
 				
 				minecraft::paletted_container cont2 = chun.chunks[x].biome;
