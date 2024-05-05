@@ -20,6 +20,7 @@
 #include <openssl/evp.h>
 #include <bitset>
 #include "libs/chunks.hpp"
+#include <math.h>
 #if defined(__linux__)
 #  include <endian.h>
 #elif defined(__FreeBSD__) || defined(__NetBSD__)
@@ -693,18 +694,18 @@ int execute_pkt(packet p, int state, User &user, int index)
 				orig_z = z;
 				orig_y = y;
 				x = x & 15;
-				y = y/16;
-				int y_chunk_y = orig_y%16;
+				y = floor((((y + 1)+ 64)/16));
+				int y_chunk_y = (orig_y + 1) & 15;
 				z = z & 15;
 
-				log(val);
 				log("x: ", x);
+				log("orig y", orig_y);
 				log("y: ", y_chunk_y);
 				log("z: ", z);
-				minecraft::chunk_rw chun = find_chunk({x = orig_x/16, z = orig_z/16});
+				minecraft::chunk_rw chun = find_chunk({.x = orig_x/16, .z = orig_z/16});
 				std::vector<std::bitset<4>> chunk = chun.chunks[y].blocks.block_indexes_nums;
 				std::bitset<4> new_block(0x1);
-				chunk[((y_chunk_y*256) + (z*16) + (15 - x))] = new_block;
+				chunk[(((y_chunk_y))*256) + (z*16) + (15 - x)] = new_block;
 				std::vector<unsigned long> longs;
     				std::string buf;
 				for (int i = 0; i < chunk.size(); i += 16)
@@ -720,6 +721,8 @@ int execute_pkt(packet p, int state, User &user, int index)
 				chun.chunks[y].blocks.block_indexes = longs;	
 				chun.chunks[y].block_count++;
 				chun.chunks[y].blocks.block_indexes_nums = chunk;
+				auto c = chunks_r.find({.x = orig_x/16, .z = orig_z/16});
+				c->second = chun;
 				for (auto& value: users)
 				{
 					send_chunk(value.second, orig_x/16, orig_z/16);
@@ -782,7 +785,7 @@ User read_ev(char *pkt, int sock, User user)
 		}
 		std::cout << "\n";
 		state = execute_pkt(packets_to_process[i], state, user, 0);
-		log(state);
+		log("state", state);
 		user.set_state(state);
 		free(packets_to_process[i].data);
 	}
