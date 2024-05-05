@@ -19,6 +19,7 @@
 #include "libs/world_gen.hpp"
 #include <openssl/evp.h>
 #include <bitset>
+#include "libs/chunks.hpp"
 #if defined(__linux__)
 #  include <endian.h>
 #elif defined(__FreeBSD__) || defined(__NetBSD__)
@@ -35,9 +36,8 @@ int connected = 0;
 int epfd = 0;
 
 
-std::vector<minecraft::chunk_indirect> spawn_chunks;
 std::unordered_map<int, User> users;
-minecraft::chunk empty_chunk;
+//minecraft::chunk empty_chunk;
 
 void commands(User user)
 {
@@ -282,31 +282,22 @@ void set_center_chunk(User user, unsigned long x = 0, unsigned long z = 0)
 		}, user, 0x52);
 }
 
-void send_mock_chunk(User user, int x = 0, int y = 0)
+void send_chunk(User user, int x, int z)
 {
-	minecraft::varint size = {.num = spawn_chunks[0].size()};
+	minecraft::chunk_rw chunk = find_chunk({.x = x, .z = z});
+
+	minecraft::varint size = {.num = (unsigned long)chunk.size()};
 	std::vector<const std::type_info *> types = {&typeid(int), &typeid(int), &typeid(char), &typeid(char), &typeid(minecraft::varint), 
-		&typeid(minecraft::chunk_indirect), &typeid(minecraft::varint), &typeid(minecraft::varint), &typeid(long),
+		&typeid(minecraft::chunk_rw), &typeid(minecraft::varint), &typeid(minecraft::varint), &typeid(long),
 		&typeid(minecraft::varint), &typeid(long),&typeid(minecraft::varint),
 		&typeid(long),&typeid(minecraft::varint), &typeid(long), &typeid(minecraft::varint), &typeid(minecraft::varint)};
-	std::vector<std::any> values = {x, y, (char)0x0a, (char)0x00, size, spawn_chunks[0],
+	std::vector<std::any> values = {x, z, (char)0x0a, (char)0x00, size, chunk,
 	(minecraft::varint){.num = 0}, (minecraft::varint){.num = 1}, (long)0,(minecraft::varint){.num = 1}, (long)0,(minecraft::varint){.num = 1},
 	(long)0, (minecraft::varint){.num = 1}, (long)0,(minecraft::varint){.num = 0}, (minecraft::varint){.num = 0}};
 	pkt_send(types, values, user, 0x25);
 }
 
-void send_empty_chunk(User user, int x = 0, int y = 0)
-{
-	minecraft::varint size = {.num = empty_chunk.size()};
-	std::vector<const std::type_info *> types = {&typeid(int), &typeid(int), &typeid(char), &typeid(char), &typeid(minecraft::varint), 
-		&typeid(minecraft::chunk), &typeid(minecraft::varint), &typeid(minecraft::varint), &typeid(long),
-		&typeid(minecraft::varint), &typeid(long),&typeid(minecraft::varint),
-		&typeid(long),&typeid(minecraft::varint), &typeid(long), &typeid(minecraft::varint), &typeid(minecraft::varint)};
-	std::vector<std::any> values = {x, y, (char)0x0a, (char)0x00, size, empty_chunk,
-	(minecraft::varint){.num = 0}, (minecraft::varint){.num = 1}, (long)0,(minecraft::varint){.num = 1}, (long)0,(minecraft::varint){.num = 1},
-	(long)0, (minecraft::varint){.num = 1}, (long)0,(minecraft::varint){.num = 0}, (minecraft::varint){.num = 0}};
-	pkt_send(types, values, user, 0x25);
-}
+
 
 void spawn_entities_to_user(User user)
 {
@@ -540,10 +531,7 @@ int execute_pkt(packet p, int state, User &user, int index)
 				{
 					for (int z = -3; z <= 3; z++)
 					{
-						if (abs(x) == 3 || abs(z) == 3)
-							send_empty_chunk(user, x, z);
-						else
-							send_mock_chunk(user, x, z);
+						send_chunk(user, x, z);
 					}
 				}
 				send_tab();
@@ -695,7 +683,7 @@ int execute_pkt(packet p, int state, User &user, int index)
 				char *ptr = p.data;
 				ptr++;
 				unsigned long val = read_position(ptr);
-				std::int32_t orig_x, orig_z;
+				std::int32_t orig_x,orig_y, orig_z;
 
 				std::int32_t x = val >> 38;
 				std::int32_t y = val << 52 >> 52;
@@ -703,20 +691,22 @@ int execute_pkt(packet p, int state, User &user, int index)
 				
 				orig_x = x;
 				orig_z = z;
+				orig_y = y;
 				x = x & 15;
-				y = y - 63;
+				y = y/16;
+				int y_chunk_y = orig_y%16;
 				z = z & 15;
 
 				log(val);
 				log("x: ", x);
-				log("y: ", y);
+				log("y: ", y_chunk_y);
 				log("z: ", z);
-
-				std::vector<std::bitset<4>> chunk = spawn_chunks[0].chunks[8].blocks.block_indexes_nums;
+				minecraft::chunk_rw chun = find_chunk({x = orig_x/16, z = orig_z/16});
+				std::vector<std::bitset<4>> chunk = chun.chunks[y].blocks.block_indexes_nums;
 				std::bitset<4> new_block(0x1);
-				chunk[((y*256) + (z*16) + (15 - x))] = new_block;
+				chunk[((y_chunk_y*256) + (z*16) + (15 - x))] = new_block;
 				std::vector<unsigned long> longs;
-    			std::string buf;
+    				std::string buf;
 				for (int i = 0; i < chunk.size(); i += 16)
 				{
 					for (int x = i; x < (i + 16); x++)
@@ -727,12 +717,12 @@ int execute_pkt(packet p, int state, User &user, int index)
 					buf.clear();
 				}
 
-				spawn_chunks[0].chunks[8].blocks.block_indexes = longs;	
-				spawn_chunks[0].chunks[8].block_count++;
-				spawn_chunks[0].chunks[8].blocks.block_indexes_nums = chunk;
+				chun.chunks[y].blocks.block_indexes = longs;	
+				chun.chunks[y].block_count++;
+				chun.chunks[y].blocks.block_indexes_nums = chunk;
 				for (auto& value: users)
 				{
-					send_mock_chunk(value.second, orig_x/16, orig_z/16);
+					send_chunk(value.second, orig_x/16, orig_z/16);
 				}
 				/*for (int xx = -17; xx < 17; xx++)
 				{
@@ -881,36 +871,12 @@ int main()
 	log(std::format("Server listening to {}:{}", SV_IP, SV_PORT));
 	listen(sock, 32);
 	log("Generating world...");
-	int in = 0;
-	int ii = 0;
-	while (ii < 6)
+	for (int x = -3; x < 3; x++)
 	{
-		minecraft::chunk_indirect chunks;
-		while (in < 24)
+		for (int z = -3; z <= 3; z++)
 		{
-			minecraft::chunk_section_indirect new_chunk;
-			if (in < 8)
-			{
-				new_chunk = {.block_count = 4096, .blocks = world_gen_inderect(), .biome = biome_gen()};
-				if (in == 7)
-					new_chunk = {.block_count = 4096, .blocks = world_gen_inderect(true), .biome = biome_gen()};
-			}
-			else
-				new_chunk = {.block_count = 0, .blocks = world_gen_inderect_empty(), .biome = biome_gen()};
-			chunks.chunks.push_back(new_chunk);
-			in++;
+			find_chunk({.x = x, .z = z});
 		}
-		spawn_chunks.push_back(chunks);
-		ii++;
-		in = 0;
-	}
-	in = 0;
-	while (in < 24)
-	{
-		minecraft::chunk_section new_chunk;
-		new_chunk = {.block_count = 0, .blocks = world_gen_empty(), .biome = biome_gen()};
-		empty_chunk.chunks.push_back(new_chunk);
-		in++;
 	}
 	log("World generated!");
 	std::thread read_l(read_loop, epfd);

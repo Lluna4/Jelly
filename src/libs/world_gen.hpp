@@ -4,6 +4,8 @@
 #include <vector>
 #include <iostream>
 #include <bitset>
+#include <unordered_map>
+#include "chunks.hpp"
 
 void printBits(long n) {
   for (int i = sizeof(n) * 8 - 1; i >= 0; i--) {
@@ -14,21 +16,6 @@ void printBits(long n) {
     std::cout << bitSet;
   }
   std::cout << std::endl;
-}
-
-
-minecraft::paletted_container world_gen()
-{
-    minecraft::paletted_container ret = {.bits_per_entry = 0, 
-    .block_ids = {(minecraft::varint){.num = 9}}, .data_lenght = (minecraft::varint){.num = 0}, .block_indexes = {}};
-    return ret;
-}
-
-minecraft::paletted_container world_gen_empty()
-{
-    minecraft::paletted_container ret = {.bits_per_entry = 0, 
-    .block_ids = {(minecraft::varint){.num = 0}}, .data_lenght = (minecraft::varint){.num = 0}, .block_indexes = {}};
-    return ret;
 }
 
 std::bitset<64> concat(std::vector<std::bitset<4>> &vec, int index)
@@ -54,9 +41,9 @@ std::bitset<64> concat(std::vector<std::bitset<4>> &vec, int index, int change_i
     return std::bitset<64>(buf);
 }
 
-minecraft::paletted_container_indirect world_gen_inderect(bool surface = false)
+minecraft::paletted_container_rw world_gen_inderect(bool surface = false)
 {
-    minecraft::paletted_container_indirect ret = {.bits_per_entry = 4, .palette_data_entries = (minecraft::varint){.num = 3}, 
+    minecraft::paletted_container_rw ret = {.bits_per_entry = 4, .palette_data_entries = (minecraft::varint){.num = 3}, 
     .block_ids = {(minecraft::varint){.num = 0}, (minecraft::varint){.num = 9}, (minecraft::varint){.num = 10}}, 
     .data_lenght = (minecraft::varint){.num = 256}};
 
@@ -91,9 +78,9 @@ minecraft::paletted_container_indirect world_gen_inderect(bool surface = false)
     return ret;
 }
 
-minecraft::paletted_container_indirect world_gen_inderect_empty()
+minecraft::paletted_container_rw world_gen_inderect_empty()
 {
-    minecraft::paletted_container_indirect ret = {.bits_per_entry = 4, .palette_data_entries = (minecraft::varint){.num = 3}, 
+    minecraft::paletted_container_rw ret = {.bits_per_entry = 4, .palette_data_entries = (minecraft::varint){.num = 3}, 
     .block_ids = {(minecraft::varint){.num = 0}, (minecraft::varint){.num = 9}, (minecraft::varint){.num = 10}}, 
     .data_lenght = (minecraft::varint){.num = 256}};
 
@@ -145,9 +132,43 @@ minecraft::paletted_container_indirect world_gen_inderect_empty()
     return ret;
 }*/
 
-minecraft::paletted_container biome_gen()
+minecraft::paletted_container_rw biome_gen()
 {
-    minecraft::paletted_container ret = {.bits_per_entry = 0, 
+    minecraft::paletted_container_rw ret = {.bits_per_entry = 0, 
     .block_ids = {(minecraft::varint){.num = 0}}, .data_lenght = (minecraft::varint){.num = 0}, .block_indexes = {}};
     return ret;
+}
+
+minecraft::chunk_rw chunk_gen_r()
+{
+	int in = 0;
+	minecraft::chunk_rw chunks;
+	while (in < 24)
+	{
+		minecraft::chunk_section_rw new_chunk;
+		if (in < 8)
+		{	
+			new_chunk = {.block_count = 4096, .blocks = world_gen_inderect(), .biome = biome_gen()};
+			if (in == 7)
+				new_chunk = {.block_count = 4096, .blocks = world_gen_inderect(true), .biome = biome_gen()};
+			else
+				new_chunk = {.block_count = 4096, .blocks = world_gen_inderect(), .biome = biome_gen()};
+		}
+		else
+			new_chunk = {.block_count = 0, .blocks = world_gen_inderect_empty(), .biome = biome_gen()};
+		chunks.chunks.push_back(new_chunk);
+		in++;
+	}
+	return chunks;
+}
+
+minecraft::chunk_rw find_chunk(minecraft::chunk_pos pos)
+{
+	if (chunks_r.find(pos) == chunks_r.end()) //if it doesnt find a chunk it generates one
+	{
+		chunks_r.insert({pos, chunk_gen_r()});
+		return chunks_r[pos];
+	}
+	else 
+		return chunks_r[pos];
 }

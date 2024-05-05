@@ -8,6 +8,7 @@
 #include "utils.hpp"
 #include <sys/socket.h>
 #include <arpa/inet.h>
+#include "chunks.hpp"
 
 int calc_len(std::vector<const std::type_info*> types, std::vector<std::any> values)
 {
@@ -99,20 +100,10 @@ int calc_len(std::vector<const std::type_info*> types, std::vector<std::any> val
 			minecraft::node_argument root = std::any_cast<minecraft::node_argument>(values[i]); 
 			size += sizeof(char) * 5 + root.children_index.size() + root.name.len; 
 		}
-		else if (types[i]->hash_code() == typeid(minecraft::paletted_container).hash_code())
+		else if (types[i]->hash_code() == typeid(minecraft::chunk_rw).hash_code())
 		{
-			minecraft::paletted_container cont = std::any_cast<minecraft::paletted_container>(values[i]);
-			size += (1 * 3) + (sizeof(long) * cont.data_lenght.num);
-		}
-		else if (types[i]->hash_code() == typeid(minecraft::chunk).hash_code())
-		{
-			minecraft::chunk chun = std::any_cast<minecraft::chunk>(values[i]);
-			size += chun.size();
-		}
-		else if (types[i]->hash_code() == typeid(minecraft::chunk_indirect).hash_code())
-		{
-			minecraft::chunk_indirect chun = std::any_cast<minecraft::chunk_indirect>(values[i]);
-			size += chun.size();
+			minecraft::chunk_rw chunk = std::any_cast<minecraft::chunk_rw>(values[i]);
+			size += chunk.size();
 		}
 	}
 	return size;
@@ -274,65 +265,15 @@ void pkt_send(std::vector<const std::type_info*> types, std::vector<std::any> va
 			send_varint(fd, root.parser_id.num);
 			send_varint(fd, root.varies.num);
 		}
-		else if (types[i]->hash_code() == typeid(minecraft::paletted_container).hash_code())
+		else if (types[i]->hash_code() == typeid(minecraft::chunk_rw).hash_code())
 		{
-			minecraft::paletted_container cont = std::any_cast<minecraft::paletted_container>(values[i]);
-
-			send(fd, &cont.bits_per_entry, sizeof(unsigned char), 0);
-			//send_varint(fd, cont.palette_data_entries.num);
-			for (int i = 0; i < cont.block_ids.size(); i++)
-			{
-				send_varint(fd, cont.block_ids[i].num);
-			}
-			send_varint(fd, cont.data_lenght.num);
-
-			for (int i = 0; i < cont.block_indexes.size(); i++)
-			{
-				send(fd, &cont.block_indexes[i], sizeof(long), 0);
-			}
-		}
-		else if (types[i]->hash_code() == typeid(minecraft::chunk).hash_code())
-		{
-			minecraft::chunk chun = std::any_cast<minecraft::chunk>(values[i]);
+			minecraft::chunk_rw chun = std::any_cast<minecraft::chunk_rw>(values[i]);
 
 			for (int x = 0; x < chun.chunks.size(); x++)
 			{
 				chun.chunks[x].block_count = htobe16(*(uint16_t*)&chun.chunks[x].block_count);
 				send(fd, &chun.chunks[x].block_count, sizeof(short), 0);
-				minecraft::paletted_container cont = chun.chunks[x].blocks;
-
-				send(fd, &cont.bits_per_entry, sizeof(unsigned char), 0);
-				//send_varint(fd, cont.palette_data_entries.num);
-				send_varint(fd, cont.block_ids[0].num);
-				send_varint(fd, cont.data_lenght.num);
-
-				/*for (int i = 0; i < cont.block_indexes.size(); i++)
-				{
-					send(fd, &cont.block_indexes[i], sizeof(long), 0);
-				}*/
-				
-				minecraft::paletted_container cont2 = chun.chunks[x].biome;
-
-				send(fd, &cont2.bits_per_entry, sizeof(unsigned char), 0);
-				//send_varint(fd, cont2.palette_data_entries.num);
-				send_varint(fd, cont2.block_ids[0].num);
-				send_varint(fd, cont2.data_lenght.num);
-
-				/*for (int i = 0; i < cont2.block_indexes.size(); i++)
-				{
-					send(fd, &cont2.block_indexes[i], sizeof(long), 0);
-				}*/
-			}
-		}
-		else if (types[i]->hash_code() == typeid(minecraft::chunk_indirect).hash_code())
-		{
-			minecraft::chunk_indirect chun = std::any_cast<minecraft::chunk_indirect>(values[i]);
-
-			for (int x = 0; x < chun.chunks.size(); x++)
-			{
-				chun.chunks[x].block_count = htobe16(*(uint16_t*)&chun.chunks[x].block_count);
-				send(fd, &chun.chunks[x].block_count, sizeof(short), 0);
-				minecraft::paletted_container_indirect cont = chun.chunks[x].blocks;
+				minecraft::paletted_container_rw cont = chun.chunks[x].blocks;
 
 				send(fd, &cont.bits_per_entry, sizeof(unsigned char), 0);
 				send_varint(fd, cont.palette_data_entries.num);
@@ -346,17 +287,17 @@ void pkt_send(std::vector<const std::type_info*> types, std::vector<std::any> va
 					send(fd, &conv, sizeof(unsigned long), 0);
 				}
 				
-				minecraft::paletted_container cont2 = chun.chunks[x].biome;
+				minecraft::paletted_container_rw cont2 = chun.chunks[x].biome;
 
 				send(fd, &cont2.bits_per_entry, sizeof(unsigned char), 0);
 				//send_varint(fd, cont2.palette_data_entries.num);
 				send_varint(fd, cont2.block_ids[0].num);
 				send_varint(fd, cont2.data_lenght.num);
 
-				/*for (int i = 0; i < cont2.block_indexes.size(); i++)
+				for (int i = 0; i < cont2.block_indexes.size(); i++)
 				{
 					send(fd, &cont2.block_indexes[i], sizeof(long), 0);
-				}*/
+				}
 			}
 		}
 	}
