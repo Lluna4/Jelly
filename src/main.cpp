@@ -36,6 +36,13 @@ using json = nlohmann::json;
 int connected = 0;
 int epfd = 0;
 
+struct packet_def
+{
+	std::vector<const std::type_info *> types;
+	std::vector<std::any> values;
+	User user;
+	char packet_id;
+};
 
 std::unordered_map<int, User> users;
 //minecraft::chunk empty_chunk;
@@ -678,26 +685,97 @@ int execute_pkt(packet p, int state, User &user, int index)
 				}*/
 			}
 			break;
+		case 0x21:
+			if (state == 10)
+			{
+				char *ptr = p.data;
+				minecraft::varint status = minecraft::read_varint(ptr);
+				ptr++;
+
+				unsigned long val = read_position(ptr);
+				ptr += sizeof(long);
+				minecraft::varint face = minecraft::read_varint(ptr);
+				std::int32_t orig_x,orig_y, orig_z;
+
+				std::int32_t x = val >> 38;
+				std::int32_t y = val << 52 >> 52;
+				std::int32_t z = val << 26 >> 38;			
+				
+				orig_x = x;
+				orig_z = z;
+				orig_y = y;
+				x = x & 15;
+				y = floor((((y)+ 64)/16));
+				int y_chunk_y = (orig_y) & 15;
+				z = z & 15;
+				
+				log("Face", face.num);
+				log("x: ", x);
+				log("orig y", orig_y);
+				log("y: ", y_chunk_y);
+				log("z: ", z);
+				minecraft::chunk_rw chun = find_chunk({.x = orig_x/16, .z = orig_z/16});
+				std::vector<std::bitset<4>> chunk = chun.chunks[y].blocks.block_indexes_nums;
+				std::bitset<4> new_block(0x0);
+				chunk[(((y_chunk_y))*256) + (z*16) + (15 - x)] = new_block;
+				std::vector<unsigned long> longs;
+    				std::string buf;
+				for (int i = 0; i < chunk.size(); i += 16)
+				{
+					for (int x = i; x < (i + 16); x++)
+					{
+							buf = buf + chunk[x].to_string();
+					}
+					longs.push_back(std::bitset<64>(buf).to_ulong());
+					buf.clear();
+				}
+
+				chun.chunks[y].blocks.block_indexes = longs;	
+				chun.chunks[y].block_count--;
+				chun.chunks[y].blocks.block_indexes_nums = chunk;
+				auto c = chunks_r.find({.x = orig_x/16, .z = orig_z/16});
+				c->second = chun;
+				for (auto& value: users)
+				{
+					send_chunk(value.second, orig_x/16, orig_z/16);
+				}
+
+			}
+			break;
 		case 0x35:
 			if (state == 10)
 			{
 				char *ptr = p.data;
 				ptr++;
 				unsigned long val = read_position(ptr);
+				ptr += sizeof(long);
+				minecraft::varint face = minecraft::read_varint(ptr);
 				std::int32_t orig_x,orig_y, orig_z;
 
 				std::int32_t x = val >> 38;
 				std::int32_t y = val << 52 >> 52;
 				std::int32_t z = val << 26 >> 38;
-				
+				if (face.num == 0)
+					y--;
+				else if (face.num == 1)
+					y++;
+				else if (face.num == 2)
+					z--;
+				else if (face.num == 3)
+					z++;
+				else if (face.num == 4)
+					x--;
+				else if (face.num == 5)
+					x++;				
 				orig_x = x;
 				orig_z = z;
 				orig_y = y;
 				x = x & 15;
-				y = floor((((y + 1)+ 64)/16));
-				int y_chunk_y = (orig_y + 1) & 15;
+				y = floor((((y)+ 64)/16));
+				int y_chunk_y = (orig_y) & 15;
 				z = z & 15;
-
+				
+				log("Face", face.num);
 				log("x: ", x);
 				log("orig y", orig_y);
 				log("y: ", y_chunk_y);
@@ -745,14 +823,17 @@ int execute_pkt(packet p, int state, User &user, int index)
 
 void keep_alive_event()
 {
-	for (auto& value: users)
+	while (true)
 	{
-		if (value.second.get_state() == 10)
+		for (auto& value: users)
 		{
-			pkt_send({&typeid(long)}, {(long)0}, value.second, 0x24);
+			if (value.second.get_state() == 10)
+			{
+				pkt_send({&typeid(long)}, {(long)0}, value.second, 0x24);
+			}
 		}
+		std::this_thread::sleep_for(std::chrono::seconds(1));
 	}
-	std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 }
 
 User read_ev(char *pkt, int sock, User user)
