@@ -38,11 +38,16 @@ int epfd = 0;
 
 struct packet_def
 {
+	packet_def(std::vector<const std::type_info *> type, std::vector<std::any> value, User user, char packet_id)
+		:types(type), values(value), user_(user), packet_id_(packet_id)
+	{}
+	
 	std::vector<const std::type_info *> types;
 	std::vector<std::any> values;
-	User user;
-	char packet_id;
+	User user_;
+	char packet_id_;
 };
+std::vector<packet_def> next_tick_pkt;
 
 std::unordered_map<int, User> users;
 //minecraft::chunk empty_chunk;
