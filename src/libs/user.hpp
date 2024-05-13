@@ -44,7 +44,8 @@ class User
             pos = {.x = 0.0f, .y = 64.0f, .z = 0.0f, .yaw = 0.0f, .pitch = 0.0f};
             pronouns = "they/them";
             state = 0;
-            on_ground == true;
+            on_ground = true;
+            sneaking = true;
         }
 
         User(std::string uname, int socket)
@@ -54,7 +55,8 @@ class User
             pos = {.x = 0.0f, .y = 64.0f, .z = 0.0f, .yaw = 0.0f, .pitch = 0.0f};
             pronouns = "they/them";
             state = 0;
-            on_ground == true;
+            on_ground = true;
+            sneaking = true;
         }
 
         minecraft::uuid get_uuid()
@@ -144,6 +146,16 @@ class User
             state = stat;
         }
 
+        void set_sneaking(bool sneak)
+        {
+            sneaking = sneak;
+        }
+
+        bool get_sneaking()
+        {
+            return sneaking;
+        }
+
         void to_file()
         {
             std::ofstream file(uname_);
@@ -205,4 +217,5 @@ class User
         std::string pronouns;
         int state;
         bool on_ground;
+        bool sneaking;
 };

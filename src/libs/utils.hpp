@@ -114,14 +114,14 @@ float read_float(char *buf)
 	return num;
 }
 
-unsigned long read_position(char *buf)
+long read_position(char *buf)
 {
 	uint64_t num_as_uint64;
-	unsigned long num;
+	long num;
 
 	memcpy(&num_as_uint64, buf, sizeof(uint64_t));
 	num_as_uint64 = be64toh(num_as_uint64);
-	memcpy(&num, &num_as_uint64, sizeof(double));
+	memcpy(&num, &num_as_uint64, sizeof(long));
 
 	return num;
 }
@@ -314,4 +314,14 @@ std::bitset<12> reverse16(std::bitset<12> set)
 {
     int n = static_cast<int>(set.to_ulong());
     return std::bitset<12>((n >> 6) | (n << 6));
+}
+
+int rem_euclid(int a, int b)
+{
+	int ret = a %b;
+    if (ret < 0)
+	{
+        ret += b;
+    }
+	return ret;
 }

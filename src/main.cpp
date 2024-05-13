@@ -81,25 +81,25 @@ void commands(User user)
 			.children_index = {},
 			.name = {.len = florecilla.length(), .string = florecilla}};
 
-		pkt_send(
+		next_tick_pkt.emplace_back(packet_def(
 				{
 				&typeid(minecraft::varint), &typeid(minecraft::node_root), &typeid(minecraft::node_literal),
 				&typeid(minecraft::node_argument), &typeid(minecraft::node_literal),&typeid(minecraft::varint)
 			},
 			{
 				(minecraft::varint){.num = 4}, root_node, pron_command, args, pron_command2,(minecraft::varint){.num = 0}
-			}, user, 0x11);
+			}, user, 0x11));
 	}
 	else
 	{
-		pkt_send(
+		next_tick_pkt.emplace_back(packet_def(
 				{
 				&typeid(minecraft::varint), &typeid(minecraft::node_root), &typeid(minecraft::node_literal),
 				&typeid(minecraft::node_argument), &typeid(minecraft::varint)
 			},
 			{
 				(minecraft::varint){.num = 3}, root_node, pron_command, args, (minecraft::varint){.num = 0}
-			}, user, 0x11);
+			}, user, 0x11));
 	}
 }
 
@@ -117,7 +117,7 @@ void send_tab()
 	}
 	for (auto& value: users)
 	{
-		pkt_send(types, values, value.second, 0x3C);
+		next_tick_pkt.emplace_back(packet_def(types, values, value.second, 0x3C));
 	}
 }
 
@@ -125,13 +125,13 @@ void remove_tab(User user)
 {
 	for (auto& value: users)
 	{
-		pkt_send(
+		next_tick_pkt.emplace_back(packet_def(
 			{
 				&typeid(minecraft::varint), &typeid(minecraft::uuid)
 			},
 			{
 				(minecraft::varint){.num = 1}, (minecraft::uuid)user.get_uuid()
-			}, value.second, 0x3B);
+			}, value.second, 0x3B));
 	}
 }
 
@@ -156,13 +156,11 @@ void config(int sock, User user)
 	std::string channel = "minecraft:brand";
 	std::string sv_name = "Jelly";
 	
-	pkt_send({&typeid(minecraft::string), &typeid(minecraft::string)}, 
+	next_tick_pkt.emplace_back(packet_def({&typeid(minecraft::string), &typeid(minecraft::string)}, 
 		{(minecraft::string){.len = channel.length(), .string = channel}, (minecraft::string){.len = sv_name.length(), .string = sv_name}},
-		user, 0x00);
-	pkt_send({&typeid(minecraft::varint), &typeid(minecraft::string)}, {(minecraft::varint){.num = 0x01}, (minecraft::string){.len = features.length(), .string= features}}, user, 0x08);
-	pack.push_back(0x01);
-	pack.push_back(0x02);
-	send(sock, pack.c_str(), pack.length(), 0);
+		user, 0x00));
+	next_tick_pkt.emplace_back(packet_def({&typeid(minecraft::varint), &typeid(minecraft::string)}, {(minecraft::varint){.num = 0x01}, (minecraft::string){.len = features.length(), .string= features}}, user, 0x08));
+	next_tick_pkt.emplace_back(packet_def({}, {}, user, 0x02));
 }
 
 void registry_data(User user)
@@ -201,14 +199,14 @@ void status_response(User user)
 	};
 	response_str = response.dump();
 	std::cout << response_str << std::endl;
-	pkt_send(
+	next_tick_pkt.emplace_back(packet_def(
 		{
 			&typeid(minecraft::string)
 		},
 		{
 			(minecraft::string){.len = response_str.length(), .string = response_str}
 		},
-		user, 0x00);
+		user, 0x00));
 }
 
 void send_chat(std::string contents, std::string sender)
@@ -216,7 +214,7 @@ void send_chat(std::string contents, std::string sender)
 	short lenght1 = (short)contents.length(), length2 = (short)sender.length();
 	for (auto& value: users)
 	{
-		pkt_send({
+		next_tick_pkt.emplace_back(packet_def({
 			&typeid(minecraft::string_tag), &typeid(minecraft::varint),
 			&typeid(minecraft::string_tag),
 			&typeid(bool)
@@ -226,14 +224,14 @@ void send_chat(std::string contents, std::string sender)
 			(minecraft::varint){.num = 0},
 			(minecraft::string_tag){.len = length2, .string = sender},
 			false
-		}, value.second, 0x1C);
+		}, value.second, 0x1C));
 	}
 }
 
 void send_chat(std::string contents, std::string sender, User user)
 {
 	short lenght1 = (short)contents.length(), length2 = (short)sender.length();
-	pkt_send({
+	next_tick_pkt.emplace_back(packet_def({
 			&typeid(minecraft::string_tag), &typeid(minecraft::varint),
 			&typeid(minecraft::string_tag),
 			&typeid(bool)
@@ -243,7 +241,7 @@ void send_chat(std::string contents, std::string sender, User user)
 			(minecraft::varint){.num = 0},
 			(minecraft::string_tag){.len = length2, .string = sender},
 			false
-		}, user, 0x1C);
+		}, user, 0x1C));
 }
 
 void system_chat(std::string contents)
@@ -251,26 +249,26 @@ void system_chat(std::string contents)
 	short lenght = contents.length();
 	for (auto& value: users)
 	{
-		pkt_send(
+		next_tick_pkt.emplace_back(packet_def(
 			{
 				&typeid(minecraft::string_tag), &typeid(bool)
 			},
 			{
 				(minecraft::string_tag){.len = lenght, .string = contents}, false
-			}, value.second, 0x69);
+			}, value.second, 0x69));
 	}
 }
 
 void system_chat(std::string contents, User user)
 {
 	short lenght = contents.length();
-	pkt_send(
+	next_tick_pkt.emplace_back(packet_def(
 		{
 			&typeid(minecraft::string_tag), &typeid(bool)
 		},
 		{
 			(minecraft::string_tag){.len = lenght, .string = contents}, false
-		}, user, 0x69);
+		}, user, 0x69));
 }
 
 void update_list(User user)
@@ -286,13 +284,13 @@ void update_list(User user)
 
 void set_center_chunk(User user, unsigned long x = 0, unsigned long z = 0)
 {
-	pkt_send(
+	next_tick_pkt.emplace_back(packet_def(
 		{
 			&typeid(minecraft::varint), &typeid(minecraft::varint)
 		},
 		{
 			(minecraft::varint){.num = x}, (minecraft::varint){.num = z}
-		}, user, 0x52);
+		}, user, 0x52));
 }
 
 void send_chunk(User user, int x, int z)
@@ -307,7 +305,7 @@ void send_chunk(User user, int x, int z)
 	std::vector<std::any> values = {x, z, (char)0x0a, (char)0x00, size, chunk,
 	(minecraft::varint){.num = 0}, (minecraft::varint){.num = 1}, (long)0,(minecraft::varint){.num = 1}, (long)0,(minecraft::varint){.num = 1},
 	(long)0, (minecraft::varint){.num = 1}, (long)0,(minecraft::varint){.num = 0}, (minecraft::varint){.num = 0}};
-	pkt_send(types, values, user, 0x25);
+	next_tick_pkt.emplace_back(packet_def(types, values, user, 0x25));
 }
 
 
@@ -329,7 +327,7 @@ void spawn_entities_to_user(User user)
 			(minecraft::varint){.num = 124}, pos.x, pos.y, pos.z, (char)(pos.pitch * 360.0 / 256.0), (char)(pos.yaw * 360.0 / 256.0),
 			(char)(pos.yaw * 360.0 / 256.0), (minecraft::varint){.num = 0}, (short)0, (short)0, (short)0};
 		
-		pkt_send(types, values, user, 0x01);
+		next_tick_pkt.emplace_back(packet_def(types, values, user, 0x01));
 	}
 }
 
@@ -349,7 +347,7 @@ void spawn_user_to_users(User user)
 	{
 		if (value.first == user.get_socket() || value.second.get_state() != 10)
 			continue;
-		pkt_send(types, values, value.second, 0x01);
+		next_tick_pkt.emplace_back(packet_def(types, values, value.second, 0x01));
 	}
 }
 
@@ -366,7 +364,7 @@ void update_pos_to_users(User user, position pos, bool on_ground)
 	{
 		if (value.first == user.get_socket() || value.second.get_state() != 10)
 			continue;
-		pkt_send(types, values, value.second, 0x2C);
+		next_tick_pkt.emplace_back(packet_def(types, values, value.second, 0x2C));
 	}
 }
 
@@ -385,9 +383,9 @@ void update_pos_rot_to_users(User user, position pos, bool on_ground)
 	{
 		if (value.first == user.get_socket() || value.second.get_state() != 10)
 			continue;
-		pkt_send(types, values, value.second, 0x2C);
-		pkt_send({&typeid(minecraft::varint), &typeid(char)}, 
-		{(minecraft::varint){.num = (unsigned long)user.get_socket()}, (char)(pos.yaw * 360.0 / 256.0)}, value.second, 0x46);
+		next_tick_pkt.emplace_back(packet_def(types, values, value.second, 0x2C));
+		next_tick_pkt.emplace_back(packet_def({&typeid(minecraft::varint), &typeid(char)}, 
+		{(minecraft::varint){.num = (unsigned long)user.get_socket()}, (char)(pos.yaw * 360.0 / 256.0)}, value.second, 0x46));
 	}
 	
 }
@@ -424,7 +422,7 @@ int execute_pkt(packet p, int state, User &user, int index)
 				uuid_new.generate(uname);
 				user.set_uuid(uuid_new);
 				connected++;
-				pkt_send(
+				next_tick_pkt.emplace_back(packet_def(
 					{
 						&typeid(minecraft::uuid),
 						&typeid(minecraft::string),
@@ -436,7 +434,7 @@ int execute_pkt(packet p, int state, User &user, int index)
 						(minecraft::varint){.num = 0}
 					},
 					user,
-					0x02);
+					0x02));
 				ret = 3;
 			}
 			else if (state == 4)
@@ -497,9 +495,9 @@ int execute_pkt(packet p, int state, User &user, int index)
 					(minecraft::string){.len = strlen("minecraft:overworld"), .string = "minecraft:overworld"}, (long)123456, (unsigned char)3,
 					(char)-1, false, true, false, (minecraft::varint){.num = 0}
 				};
-				pkt_send(types, values, user, 0x29);
+				next_tick_pkt.emplace_back(packet_def(types, values, user, 0x29));
 				position pos = user.get_position();
-				pkt_send(
+				next_tick_pkt.emplace_back(packet_def(
 					{
 						&typeid(long long),
 						&typeid(float)
@@ -509,8 +507,8 @@ int execute_pkt(packet p, int state, User &user, int index)
 						0.0f
 					},
 					user, 0x54
-				);
-				pkt_send(
+				));
+				next_tick_pkt.emplace_back(packet_def(
 					{
 						&typeid(double), &typeid(double), &typeid(double), &typeid(float), &typeid(float), &typeid(char), &typeid(minecraft::varint)
 					},
@@ -518,8 +516,8 @@ int execute_pkt(packet p, int state, User &user, int index)
 						pos.x, pos.y, pos.z, pos.yaw, pos.pitch, (char)0, (minecraft::varint){.num = 0}
 					},
 					user, 0x3E
-				);
-				pkt_send(
+				));
+				next_tick_pkt.emplace_back(packet_def(
 					{
 						&typeid(unsigned char), &typeid(float)
 					},
@@ -527,10 +525,10 @@ int execute_pkt(packet p, int state, User &user, int index)
 						(unsigned char)13, 0.0f
 					},
 					user, 0x20
-				);
+				));
 				float eventf = 1;
 				size = size - 2;
-				pkt_send(
+				next_tick_pkt.emplace_back(packet_def(
 					{
 						&typeid(unsigned char), &typeid(float)
 					},
@@ -538,7 +536,7 @@ int execute_pkt(packet p, int state, User &user, int index)
 						(unsigned char)3, eventf
 					},
 					user, 0x20
-				);
+				));
 				set_center_chunk(user);
 				for (int x = -3; x < 3; x++)
 				{
@@ -602,7 +600,7 @@ int execute_pkt(packet p, int state, User &user, int index)
 				std::string command = read_string(p.data);
 				if (std::string("pronouns").starts_with(command))
 				{
-					pkt_send(
+					next_tick_pkt.emplace_back(packet_def(
 						{
 						&typeid(minecraft::varint), &typeid(minecraft::varint),
 						&typeid(minecraft::varint), &typeid(minecraft::varint),
@@ -616,7 +614,7 @@ int execute_pkt(packet p, int state, User &user, int index)
 						.string = std::string("pronouns")}, false
 
 							}, user, 0x10
-					);
+					));
 				}
 			}
 		case 0x17:
@@ -638,11 +636,11 @@ int execute_pkt(packet p, int state, User &user, int index)
 				user.update_position(pos);
 				log_header();
 				std::cout << "New pos: x: " << pos.x << " y: " << pos.y << " z: " << pos.z << " yaw: " << pos.yaw << " pitch: " << pos.pitch << std::endl;
-				//pkt_send({&typeid(long)},{(long)0},user, 0x24);
+				//next_tick_pkt.emplace_back(packet_def({&typeid(long)},{(long)0},user, 0x24);
 				
 				/*if (pos.y <= 500.0f)
 				{
-					pkt_send(
+					next_tick_pkt.emplace_back(packet_def(
 						{
 							&typeid(double), &typeid(double), &typeid(double), &typeid(float), &typeid(float), &typeid(char), &typeid(minecraft::varint)
 						},
@@ -675,10 +673,10 @@ int execute_pkt(packet p, int state, User &user, int index)
 				user.update_position(pos);
 				log_header();
 				std::cout << "New pos2: x: " << pos.x << " y: " << pos.y << " z: " << pos.z << " yaw: " << pos.yaw << " pitch: " << pos.pitch << std::endl;
-				//pkt_send({&typeid(long)},{(long)0},user, 0x24);
+				//next_tick_pkt.emplace_back(packet_def({&typeid(long)},{(long)0},user, 0x24);
 				/*if (pos.y <= 500.0f)
 				{
-					pkt_send(
+					next_tick_pkt.emplace_back(packet_def(
 						{
 							&typeid(double), &typeid(double), &typeid(double), &typeid(float), &typeid(float), &typeid(char), &typeid(minecraft::varint)
 						},
@@ -696,63 +694,100 @@ int execute_pkt(packet p, int state, User &user, int index)
 				char *ptr = p.data;
 				minecraft::varint status = minecraft::read_varint(ptr);
 				ptr++;
-
-				unsigned long val = read_position(ptr);
-				ptr += sizeof(long);
-				minecraft::varint face = minecraft::read_varint(ptr);
-				std::int32_t orig_x,orig_y, orig_z;
-
-				std::int32_t x = val >> 38;
-				std::int32_t y = val << 52 >> 52;
-				std::int32_t z = val << 26 >> 38;			
-				
-				orig_x = x;
-				orig_z = z;
-				orig_y = y;
-				x = x & 15;
-				y = floor((((y)+ 64)/16));
-				int y_chunk_y = (orig_y) & 15;
-				z = z & 15;
-				
-				log("Face", face.num);
-				log("x: ", x);
-				log("orig y", orig_y);
-				log("y: ", y_chunk_y);
-				log("z: ", z);
-				minecraft::chunk_rw chun = find_chunk({.x = orig_x/16, .z = orig_z/16});
-				std::vector<std::bitset<4>> chunk = chun.chunks[y].blocks.block_indexes_nums;
-				std::bitset<4> new_block(0x0);
-				chunk[(((y_chunk_y))*256) + (z*16) + (15 - x)] = new_block;
-				std::vector<unsigned long> longs;
-    				std::string buf;
-				for (int i = 0; i < chunk.size(); i += 16)
+				if (status.num == 0)
 				{
-					for (int x = i; x < (i + 16); x++)
+					unsigned long val = read_position(ptr);
+					ptr += sizeof(long);
+					minecraft::varint face = minecraft::read_varint(ptr);
+					std::int32_t orig_x,orig_y, orig_z;
+
+					std::int32_t x = val >> 38;
+					std::int32_t y = val << 52 >> 52;
+					std::int32_t z = val << 26 >> 38;
+					if (face.num == 0)
+						y--;
+					else if (face.num == 1)
+						y++;
+					else if (face.num == 2)
+						z--;
+					else if (face.num == 3)
+						z++;
+					else if (face.num == 4)
+						x--;
+					else if (face.num == 5)
+						x++;				
+					orig_x = x;
+					orig_z = z;
+					orig_y = y;
+					position user_pos = user.get_position();
+					if (user.get_sneaking() == true)
 					{
-							buf = buf + chunk[x].to_string();
+						if (abs(orig_x - nearbyint(user_pos.x)) < 2 && orig_y == floor(user_pos.y)&& abs(orig_z - nearbyint(user_pos.z)) < 2)
+							break;
 					}
-					longs.push_back(std::bitset<64>(buf).to_ulong());
-					buf.clear();
-				}
+					else
+					{
+						if (orig_x == floor(user_pos.x) && orig_y == floor(user_pos.y)&& orig_z == floor(user_pos.z))
+							break;
+					}
+					x = rem_euclid(x, 16);
+					y = floor((((y)+ 64)/16));
+					int y_chunk_y = rem_euclid(orig_y, 16);
+					z = rem_euclid(z, 16);
+					
+					minecraft::chunk_rw chun = find_chunk({.x = (orig_x >> 4), .z = (orig_z >> 4)});
+					std::vector<std::bitset<4>> chunk = chun.chunks[y].blocks.block_indexes_nums;
+					std::bitset<4> new_block(0x0);
+					chunk[(((y_chunk_y))*256) + (abs(z)*16) + (15 - abs(x))] = new_block;
+					std::vector<unsigned long> longs;
+					std::string buf;
+					for (int i = 0; i < chunk.size(); i += 16)
+					{
+						for (int x = i; x < (i + 16); x++)
+						{
+								buf = buf + chunk[x].to_string();
+						}
+						longs.push_back(std::bitset<64>(buf).to_ulong());
+						buf.clear();
+					}
 
-				chun.chunks[y].blocks.block_indexes = longs;	
-				chun.chunks[y].block_count--;
-				chun.chunks[y].blocks.block_indexes_nums = chunk;
-				auto c = chunks_r.find({.x = orig_x/16, .z = orig_z/16});
-				c->second = chun;
-				for (auto& value: users)
-				{
-					send_chunk(value.second, orig_x/16, orig_z/16);
+					chun.chunks[y].blocks.block_indexes = longs;	
+					chun.chunks[y].block_count++;
+					chun.chunks[y].blocks.block_indexes_nums = chunk;
+					auto c = chunks_r.find({.x = (orig_x >> 4), .z = (orig_z >> 4)});
+					c->second = chun;
+					for (auto& value: users)
+					{
+						send_chunk(value.second, (orig_x >> 4), (orig_z >> 4));
+					}
 				}
 
 			}
 			break;
+		case 0x22:
+			if (state == 10)
+			{
+				char *ptr = p.data;
+				unsigned long buf = 0;
+
+				ptr += ReadUleb128(ptr, &buf);
+
+				minecraft::varint action = minecraft::read_varint(ptr);
+				switch (action.num)
+				{
+					case 0:
+						user.set_sneaking(true);
+						break;
+					case 1:
+						user.set_sneaking(false);
+				};
+			}
 		case 0x35:
 			if (state == 10)
 			{
 				char *ptr = p.data;
 				ptr++;
-				unsigned long val = read_position(ptr);
+				long val = read_position(ptr);
 				ptr += sizeof(long);
 				minecraft::varint face = minecraft::read_varint(ptr);
 				std::int32_t orig_x,orig_y, orig_z;
@@ -775,20 +810,26 @@ int execute_pkt(packet p, int state, User &user, int index)
 				orig_x = x;
 				orig_z = z;
 				orig_y = y;
-				x = x & 15;
+				position user_pos = user.get_position();
+				if (user.get_sneaking() == true)
+				{
+					if (abs(orig_x - nearbyint(user_pos.x)) < 2 && orig_y == floor(user_pos.y)&& abs(orig_z - nearbyint(user_pos.z)) < 2)
+						break;
+				}
+				else
+				{
+					if (orig_x == floor(user_pos.x) && orig_y == floor(user_pos.y)&& orig_z == floor(user_pos.z))
+						break;
+				}
+				x = rem_euclid(x, 16);
 				y = floor((((y)+ 64)/16));
-				int y_chunk_y = (orig_y) & 15;
-				z = z & 15;
-				
-				log("Face", face.num);
-				log("x: ", x);
-				log("orig y", orig_y);
-				log("y: ", y_chunk_y);
-				log("z: ", z);
-				minecraft::chunk_rw chun = find_chunk({.x = orig_x/16, .z = orig_z/16});
+				int y_chunk_y = rem_euclid(orig_y, 16);
+				z = rem_euclid(z, 16);
+
+				minecraft::chunk_rw chun = find_chunk({.x = (orig_x >> 4), .z = (orig_z >> 4)});
 				std::vector<std::bitset<4>> chunk = chun.chunks[y].blocks.block_indexes_nums;
-				std::bitset<4> new_block(0x1);
-				chunk[(((y_chunk_y))*256) + (z*16) + (15 - x)] = new_block;
+				std::bitset<4> new_block(0x3);
+				chunk[(((y_chunk_y))*256) + (abs(z)*16) + (15 - abs(x))] = new_block;
 				std::vector<unsigned long> longs;
     				std::string buf;
 				for (int i = 0; i < chunk.size(); i += 16)
@@ -804,11 +845,11 @@ int execute_pkt(packet p, int state, User &user, int index)
 				chun.chunks[y].blocks.block_indexes = longs;	
 				chun.chunks[y].block_count++;
 				chun.chunks[y].blocks.block_indexes_nums = chunk;
-				auto c = chunks_r.find({.x = orig_x/16, .z = orig_z/16});
+				auto c = chunks_r.find({.x = (orig_x >> 4), .z = (orig_z >> 4)});
 				c->second = chun;
 				for (auto& value: users)
 				{
-					send_chunk(value.second, orig_x/16, orig_z/16);
+					send_chunk(value.second, (orig_x >> 4), (orig_z >> 4));
 				}
 				/*for (int xx = -17; xx < 17; xx++)
 				{
@@ -834,7 +875,7 @@ void keep_alive_event()
 		{
 			if (value.second.get_state() == 10)
 			{
-				pkt_send({&typeid(long)}, {(long)0}, value.second, 0x24);
+				next_tick_pkt.emplace_back(packet_def({&typeid(long)}, {(long)0}, value.second, 0x24));
 			}
 		}
 		std::this_thread::sleep_for(std::chrono::seconds(1));
@@ -893,7 +934,13 @@ void read_loop(int epfd)
 	int rd_status = 0;
 	while (true)
 	{
-		events_ready = epoll_wait(epfd, events, MAX_EVENTS, -1);
+		for (auto &pkt: next_tick_pkt)
+		{
+			pkt_send(pkt.types, pkt.values, pkt.user_, pkt.packet_id_);
+			log("Sent packet id: ", (int)pkt.packet_id_);
+		}
+		next_tick_pkt.clear();
+		events_ready = epoll_wait(epfd, events, MAX_EVENTS, 49);
 		for (int i = 0; i < events_ready; i++)
 		{
 

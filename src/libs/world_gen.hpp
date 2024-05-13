@@ -43,8 +43,8 @@ std::bitset<64> concat(std::vector<std::bitset<4>> &vec, int index, int change_i
 
 minecraft::paletted_container_rw world_gen_inderect(bool surface = false)
 {
-    minecraft::paletted_container_rw ret = {.bits_per_entry = 4, .palette_data_entries = (minecraft::varint){.num = 3}, 
-    .block_ids = {(minecraft::varint){.num = 0}, (minecraft::varint){.num = 9}, (minecraft::varint){.num = 10}}, 
+    minecraft::paletted_container_rw ret = {.bits_per_entry = 4, .palette_data_entries = (minecraft::varint){.num = 4}, 
+    .block_ids = {(minecraft::varint){.num = 0}, (minecraft::varint){.num = 9}, (minecraft::varint){.num = 10}, (minecraft::varint){.num = 404}}, 
     .data_lenght = (minecraft::varint){.num = 256}};
 
     int index = 0;
@@ -80,8 +80,8 @@ minecraft::paletted_container_rw world_gen_inderect(bool surface = false)
 
 minecraft::paletted_container_rw world_gen_inderect_empty()
 {
-    minecraft::paletted_container_rw ret = {.bits_per_entry = 4, .palette_data_entries = (minecraft::varint){.num = 3}, 
-    .block_ids = {(minecraft::varint){.num = 0}, (minecraft::varint){.num = 9}, (minecraft::varint){.num = 10}}, 
+    minecraft::paletted_container_rw ret = {.bits_per_entry = 4, .palette_data_entries = (minecraft::varint){.num = 4}, 
+    .block_ids = {(minecraft::varint){.num = 0}, (minecraft::varint){.num = 9}, (minecraft::varint){.num = 10}, (minecraft::varint){.num = 404}}, 
     .data_lenght = (minecraft::varint){.num = 256}};
 
     int index = 0;
@@ -164,6 +164,7 @@ minecraft::chunk_rw chunk_gen_r()
 
 minecraft::chunk_rw find_chunk(minecraft::chunk_pos pos)
 {
+    std::cout << "X " << pos.x << "Z " << pos.z << std::endl;
 	if (chunks_r.find(pos) == chunks_r.end()) //if it doesnt find a chunk it generates one
 	{
 		chunks_r.insert({pos, chunk_gen_r()});
