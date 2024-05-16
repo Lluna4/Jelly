@@ -21,6 +21,7 @@
 #include <bitset>
 #include "libs/chunks.hpp"
 #include <math.h>
+#include <memory.h>
 #if defined(__linux__)
 #  include <endian.h>
 #elif defined(__FreeBSD__) || defined(__NetBSD__)
@@ -36,17 +37,7 @@ using json = nlohmann::json;
 int connected = 0;
 int epfd = 0;
 
-struct packet_def
-{
-	packet_def(std::vector<const std::type_info *> type, std::vector<std::any> value, User user, char packet_id)
-		:types(type), values(value), user_(user), packet_id_(packet_id)
-	{}
-	
-	std::vector<const std::type_info *> types;
-	std::vector<std::any> values;
-	User user_;
-	char packet_id_;
-};
+
 std::vector<packet_def> next_tick_pkt;
 
 std::unordered_map<int, User> users;
@@ -926,7 +917,80 @@ User read_ev(char *pkt, int sock, User user)
 	return user;
 }
 
-void read_loop(int epfd)
+std::vector<pkt> read_from_epfd(int epfd)
+{
+    struct epoll_event events[MAX_EVENTS];
+	int events_ready = 0;
+	int status = 0;
+	char *buff = (char *)calloc(1025, sizeof(char));
+	std::vector<pkt> ret;
+
+    events_ready = epoll_wait(epfd, events, MAX_EVENTS, -1);
+
+	for (int i = 0; i < events_ready; i++)
+	{
+		status = recv(events[i].data.fd, buff, 1024, 0);
+		if (status == -1 || status == 0)
+		{
+			close(events[i].data.fd);
+			remove_from_list(events[i].data.fd, epfd);
+			User removed_user;
+			auto user = users.find(events[i].data.fd);
+			if (user != users.end())
+				removed_user = user->second;
+			else
+				continue;
+			users.erase(user->first);
+			connected--;
+			removed_user.to_file();
+			std::string user_name = removed_user.get_uname();
+			remove_tab(removed_user);
+			system_chat(std::format("§e{} disconnected", user_name));
+		}
+		else
+		{
+			struct pkt new_pkt = {0};
+			new_pkt.data = mem_dup(buff, 1024);
+			new_pkt.fd = events[i].data.fd;
+			ret.emplace_back(new_pkt);
+		}
+		memset(buff, 0, 1024);
+	}
+	return ret;
+}
+
+void proc_pkt(std::vector<pkt> packets)
+{
+	for (auto pack: packets)
+	{
+		User found_user;
+		auto found = users.find(pack.fd);
+		if (found != users.end())
+			found_user = found->second;
+		else
+			break;
+		found->second = read_ev(pack.data, pack.fd, found_user);
+	}
+}
+
+void game_loop(int epfd)
+{
+	std::vector<pkt> packets;
+	while (true)
+	{
+		packets = read_from_epfd(epfd);
+		proc_pkt(packets);
+		for (auto &pkt: next_tick_pkt)
+		{
+			pkt_send(pkt.types, pkt.values, pkt.user_, pkt.packet_id_);
+			log("Sent packet id: ", (int)pkt.packet_id_);
+		}
+		next_tick_pkt.clear();
+		std::this_thread::sleep_for(std::chrono::milliseconds(50));
+	}
+}
+
+/*void read_loop(int epfd)
 {
 	struct epoll_event events[MAX_EVENTS];
 	int events_ready = 0;
@@ -976,7 +1040,7 @@ void read_loop(int epfd)
 			memset(buff, 0, 1024);
 		}
 	}
-}
+}*/
 
 int main()
 {
@@ -1015,7 +1079,7 @@ int main()
 		}
 	}
 	log("World generated!");
-	std::thread read_l(read_loop, epfd);
+	std::thread read_l(game_loop, epfd);
 	read_l.detach();
 	std::thread keep_alive(keep_alive_event);
 	keep_alive.detach();

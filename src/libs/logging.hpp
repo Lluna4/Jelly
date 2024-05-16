@@ -3,6 +3,7 @@
 #include <ctime>
 #include <cstring>
 #include <vector>
+#include <iostream>
 #if __has_include (<format>) && __cplusplus >= 202002L
 	#include <format>
 #else
@@ -68,15 +69,15 @@ std::string get_time()
 	time(&tiempo);
 	struct tm* a = (tm*)malloc(1 * sizeof(tm));
 	localtime_r(&tiempo, a);
-    std::string h = ft_itoa(a->tm_hour);
-    std::string min = ft_itoa(a->tm_min);
-    std::string sec = ft_itoa(a->tm_sec);
+    	std::string h = ft_itoa(a->tm_hour);
+    	std::string min = ft_itoa(a->tm_min);
+    	std::string sec = ft_itoa(a->tm_sec);
 	#ifndef NO_FORMAT
 	if (h.length() == 1)
 		h = std::format("{}{}", "0", h);
 	if (min.length() == 1)
 		min = std::format("{}{}", "0", min);
-    if (sec.length() == 1)
+    	if (sec.length() == 1)
 		sec = std::format("{}{}", "0", sec);
 	std::string ret = std::format("{}:{}:{}", h, min, sec);
 	#else

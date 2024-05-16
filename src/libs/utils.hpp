@@ -16,6 +16,12 @@ struct packet
 	char *data;
 };
 
+struct pkt
+{
+	char *data;
+	int fd;
+};
+
 std::size_t ReadUleb128(const char* addr, unsigned long* ret)
 {
   unsigned long result = 0;
