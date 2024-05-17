@@ -694,19 +694,7 @@ int execute_pkt(packet p, int state, User &user, int index)
 
 					std::int32_t x = val >> 38;
 					std::int32_t y = val << 52 >> 52;
-					std::int32_t z = val << 26 >> 38;
-					if (face.num == 0)
-						y--;
-					else if (face.num == 1)
-						y++;
-					else if (face.num == 2)
-						z--;
-					else if (face.num == 3)
-						z++;
-					else if (face.num == 4)
-						x--;
-					else if (face.num == 5)
-						x++;				
+					std::int32_t z = val << 26 >> 38;			
 					orig_x = x;
 					orig_z = z;
 					orig_y = y;
