@@ -40,7 +40,7 @@ std::map<std::string, std::any> pkt_read(packet p, std::map<std::string, const s
             data++;
             size--;
         }
-        if (var.second->hash_code() == typeid(short).hash_code())
+        else if (var.second->hash_code() == typeid(short).hash_code())
         {
             if (size < sizeof(short))
                 break;
@@ -52,7 +52,7 @@ std::map<std::string, std::any> pkt_read(packet p, std::map<std::string, const s
             data += 2;
             size -= 2;
         }
-        if (var.second->hash_code() == typeid(unsigned short).hash_code())
+        else if (var.second->hash_code() == typeid(unsigned short).hash_code())
         {
             if (size < sizeof(unsigned short))
                 break;
@@ -61,10 +61,10 @@ std::map<std::string, std::any> pkt_read(packet p, std::map<std::string, const s
             std::memcpy(&num, data, sizeof(unsigned short));
             num = be16toh(num);
             ret.insert({var.first, num});
-            data++;
-            size--;
+            data += 2;
+            size -= 2;
         }
-        if (var.second->hash_code() == typeid(int).hash_code())
+        else if (var.second->hash_code() == typeid(int).hash_code())
         {
             if (size < sizeof(int))
                 break;
@@ -73,10 +73,10 @@ std::map<std::string, std::any> pkt_read(packet p, std::map<std::string, const s
             std::memcpy(&num, data, sizeof(int));
             num = be32toh(num);
             ret.insert({var.first, num});
-            data += 2;
-            size -= 2;
+            data += 4;
+            size -= 4;
         }
-        if (var.second->hash_code() == typeid(unsigned int).hash_code())
+        else if (var.second->hash_code() == typeid(unsigned int).hash_code())
         {
             if (size < sizeof(unsigned int))
                 break;
@@ -85,8 +85,56 @@ std::map<std::string, std::any> pkt_read(packet p, std::map<std::string, const s
             std::memcpy(&num, data, sizeof(unsigned int));
             num = be32toh(num);
             ret.insert({var.first, num});
-            data++;
-            size--;
+            data += 4;
+            size -= 4;
+        }
+        else if (var.second->hash_code() == typeid(long).hash_code())
+        {
+            if (size < sizeof(long))
+                break;
+            long num = 0;
+
+            std::memcpy(&num, data, sizeof(long));
+            num = be64toh(num);
+            ret.insert({var.first, num});
+            data += 8;
+            size -= 8;
+        }
+        else if (var.second->hash_code() == typeid(unsigned long).hash_code())
+        {
+            if (size < sizeof(unsigned long))
+                break;
+            unsigned long num = 0;
+
+            std::memcpy(&num, data, sizeof(unsigned long));
+            num = be64toh(num);
+            ret.insert({var.first, num});
+            data += 8;
+            size -= 8;
+        }
+        else if (var.second->hash_code() == typeid(float).hash_code())
+        {
+            if (size < sizeof(float))
+                break;
+            float num = 0.0f;
+
+            std::memcpy(&num, data, sizeof(float));
+            num = be32toh(num);
+            ret.insert({var.first, num});
+            data += 4;
+            size -= 4;
+        }
+        else if (var.second->hash_code() == typeid(double).hash_code())
+        {
+            if (size < sizeof(double))
+                break;
+            double num = 0.0f;
+
+            std::memcpy(&num, data, sizeof(double));
+            num = be32toh(num);
+            ret.insert({var.first, num});
+            data += 8;
+            size -= 8;
         }
     }
     return ret;

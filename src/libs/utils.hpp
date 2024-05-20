@@ -331,3 +331,9 @@ int rem_euclid(int a, int b)
     }
 	return ret;
 }
+
+struct indexed_map
+{
+	std::map<std::string, const std::type_info*> map;
+	std::vector<std::string> index;
+};
