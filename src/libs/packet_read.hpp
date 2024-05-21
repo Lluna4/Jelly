@@ -126,11 +126,7 @@ std::map<std::string, std::any> pkt_read(packet p, indexed_map types)
         {
             if (size < sizeof(float))
                 break;
-            float num = 0.0f;
-
-            std::memcpy(&num, data, sizeof(float));
-            num = be32toh(num);
-            ret.insert({types.index[i], num});
+            ret.insert({types.index[i], read_float(data)});
             data += 4;
             size -= 4;
         }
