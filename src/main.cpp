@@ -22,6 +22,7 @@
 #include "libs/chunks.hpp"
 #include <math.h>
 #include <memory.h>
+#include "libs/packet_read.hpp"
 #if defined(__linux__)
 #  include <endian.h>
 #elif defined(__FreeBSD__) || defined(__NetBSD__)
@@ -608,19 +609,25 @@ int execute_pkt(packet p, int state, User &user, int index)
 					));
 				}
 			}
+			break;
+		case 0x15:
+			if (state == 10)
+			{
+				std::map<std::string, std::any> pkt = pkt_read(p, {{{"KeepID", &typeid(long)}}, {"KeepID"}});
+				log("Keep alive received: ", std::any_cast<long>(pkt["KeepID"]), "!!!!!!!!!!!!!!!");
+			}
+			break;
 		case 0x17:
 			if (state == 10)
 			{
 				char *ptr = p.data;
 				bool on_ground = true;
 				position pos = user.get_position();
-				pos.x = read_double(ptr);
-				ptr = ptr + sizeof(double);
-				pos.y = read_double(ptr);
-				ptr = ptr + sizeof(double);
-				pos.z = read_double(ptr);
-				ptr = ptr + sizeof(double);
-				on_ground = *ptr;
+				std::map<std::string, std::any> pkt = pkt_read(p, {{{"X", &typeid(double)}, {"Y", &typeid(double)}, {"Z", &typeid(double)}, {"Ground", &typeid(bool)}}, {"X", "Y", "Z", "Ground"}});
+				pos.x = std::any_cast<double>(pkt["X"]);
+				pos.y = std::any_cast<double>(pkt["Y"]);
+				pos.z = std::any_cast<double>(pkt["Z"]);
+				on_ground = std::any_cast<bool>(pkt["Ground"]);;
 				pos.yaw = pos.yaw;
 				pos.pitch = pos.pitch;
 				update_pos_to_users(user, pos, on_ground);
