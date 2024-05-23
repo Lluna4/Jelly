@@ -399,11 +399,11 @@ int execute_pkt(packet p, int state, User &user, int index)
 			}
 			else if (state == 2)
 			{
-				ReadUleb128(p.data, &size);
-				if (size < 1)
-					log_err("Invalid username size!");
-				uname = p.data;
-				uname = uname.substr(1, size);
+				indexed_map m = {.map = {
+					{"uname", &typeid(minecraft::string)}},
+				.index = {"uname"}};
+				std::map<std::string, std::any> pkt = pkt_read(p, m);
+				uname = std::any_cast<minecraft::string>(pkt["uname"]).string;
 				if (std::filesystem::exists(uname))
 				{
 					user.from_file(uname);
@@ -431,9 +431,20 @@ int execute_pkt(packet p, int state, User &user, int index)
 			}
 			else if (state == 4)
 			{
-				buf2 = read_string(p.data, buf);
-				user.set_locale(buf);
-				user.set_render_distance((int)p.data[buf2 + 1]);
+				indexed_map m = {.map = {
+					{"Locale", &typeid(minecraft::string)},
+					{"View distance", &typeid(char)},
+					{"Chat mode", &typeid(minecraft::varint)},
+					{"Chat colors", &typeid(bool)},
+					{"Skin parts", &typeid(unsigned char)},
+					{"Main hand", &typeid(minecraft::varint)},
+					{"Text Filtering", &typeid(bool)},
+					{"Allow server listings", &typeid(bool)}}, 
+					.index {"Locale", "View distance", "Chat mode", "Chat colors", "Skin parts", "Main hand", "Text Filtering", "Allow server listings"}
+				};
+				std::map<std::string, std::any> pkt = pkt_read(p, m);
+				user.set_locale(std::any_cast<minecraft::string>(pkt["Locale"]).string);
+				user.set_render_distance(std::any_cast<char>(pkt["View distance"]));
 				log("New locale: ", user.get_locale());
 				log("New render distance: ", user.get_render_distance());
 				registry_data(user);

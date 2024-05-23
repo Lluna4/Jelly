@@ -19,7 +19,7 @@
 std::map<std::string, std::any> pkt_read(packet p, indexed_map types)
 {
     std::map<std::string, std::any> ret;
-    int size = p.size;
+    int size = p.buf_size;
     char *data = p.data;
 
 
@@ -138,6 +138,34 @@ std::map<std::string, std::any> pkt_read(packet p, indexed_map types)
             ret.insert({types.index[i], read_double(data)});
             data += 8;
             size -= 8;
+        }
+        else if (var->hash_code() == typeid(minecraft::string).hash_code())
+        {
+            if (size < 1)
+                break;
+            unsigned long s = 0;
+            std::size_t varint_size = ReadUleb128(data, &s);
+            std::string str;
+            
+            if (size < (s + varint_size))
+                break;
+            data += varint_size;
+            str = data;
+            str = str.substr(0, s);
+            ret.insert({types.index[i], (minecraft::string){.len = s, .string = str}});
+            data += s;
+            size += (s + varint_size);
+        }
+        else if (var->hash_code() == typeid(minecraft::varint).hash_code())
+        {
+            if (size < 1)
+                break;
+            unsigned long num = 0;
+            std::size_t varint_size = ReadUleb128(data, &num);
+            
+            ret.insert({types.index[i], (minecraft::varint){.num = num}});
+            data += varint_size;
+            size += varint_size;
         }
     }
     return ret;

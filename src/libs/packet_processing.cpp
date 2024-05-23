@@ -25,9 +25,11 @@ std::vector<packet> process_packet(char *pkt)
 	{
 		if (*pkt == '\0')
 			break;
-        p.size = *pkt;
+        p.size = 0;
+		std::size_t size_size = ReadUleb128(pkt, &p.size);
+		p.buf_size = p.size - size_size;
 		next = pkt + (p.size + 1);
-		pkt++;
+		pkt += size_size;
         p.id = *pkt;
 		if (p.size < 0)
 		{

@@ -13,7 +13,8 @@
 struct packet
 {
 	int id;
-	int size;
+	unsigned long size;
+	std::size_t buf_size;
 	char *data;
 };
 
