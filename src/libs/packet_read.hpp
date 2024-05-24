@@ -16,6 +16,31 @@
 #  define be64toh(x) betoh64(x)
 #endif
 
+class Packet
+{
+    public:
+        Packet(std::map<std::string, std::any> data)
+            :data_(data)
+            {}
+        
+        template<typename T>
+        T get(std::string key) const 
+        {
+            auto val = data_.find(key);
+
+            if (val == data_.end())
+            {
+                throw std::runtime_error("Bad key!");
+            }
+            else
+            {
+                return std::any_cast<T>(val->second());
+            }
+        }
+    private:
+        std::map<std::string, std::any> data_;
+};
+
 std::map<std::string, std::any> pkt_read(packet p, indexed_map types)
 {
     std::map<std::string, std::any> ret;

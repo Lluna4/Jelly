@@ -464,9 +464,8 @@ int execute_pkt(packet p, int state, User &user, int index)
 		case 1:
 			if (state == 1)
 			{
-				send(user.get_socket(), (char *)(&p.size), sizeof(char), 0);
-				send(user.get_socket(), (char *)(&p.id), sizeof(char), 0);
-				send(user.get_socket(), p.data, sizeof(long), 0);
+				std::map<std::string, std::any> pkt = pkt_read(p, {{{"Ping id", &typeid(long)}}, {"Ping id"}});
+				next_tick_pkt.emplace_back(packet_def({&typeid(long)}, {std::any_cast<long>(pkt["Ping id"])}, user, p.id));
 				close(user.get_socket());
 				remove_from_list(user.get_socket(), epfd);
 				users.erase(user.get_socket());
@@ -541,9 +540,10 @@ int execute_pkt(packet p, int state, User &user, int index)
 					user, 0x20
 				));
 				set_center_chunk(user);
-				for (int x = -3; x < 3; x++)
+				int render_distance = user.get_render_distance();
+				for (int x = (abs(render_distance) * -1); x < abs(render_distance); x++)
 				{
-					for (int z = -3; z <= 3; z++)
+					for (int z = (abs(render_distance) * -1); z <= abs(render_distance); z++)
 					{
 						send_chunk(user, x, z);
 					}
@@ -598,10 +598,8 @@ int execute_pkt(packet p, int state, User &user, int index)
 		case 0x0A:
 			if (state == 10)
 			{
-				minecraft::varint id = minecraft::read_varint(p.data);
-				p.data++;
-				std::string command = read_string(p.data);
-				if (std::string("pronouns").starts_with(command))
+				std::map<std::string, std::any> pkt = pkt_read(p, {{{"Id", &typeid(minecraft::varint)}, {"Command", &typeid(minecraft::string)}}, {"Id", "Command"}});
+				if (std::string("pronouns").starts_with(std::any_cast<minecraft::string>(pkt["Command"]).string))
 				{
 					next_tick_pkt.emplace_back(packet_def(
 						{
@@ -610,7 +608,7 @@ int execute_pkt(packet p, int state, User &user, int index)
 						&typeid(minecraft::string), &typeid(bool)
 						},
 						{
-						id, (minecraft::varint){.num = 0},
+						std::any_cast<minecraft::varint>(pkt["id"]), (minecraft::varint){.num = 0},
 						(minecraft::varint){.num = std::string("pronouns").length()},
 						(minecraft::varint){.num = 1},
 						(minecraft::string){.len = std::string("pronouns").length(),
@@ -634,7 +632,12 @@ int execute_pkt(packet p, int state, User &user, int index)
 				char *ptr = p.data;
 				bool on_ground = true;
 				position pos = user.get_position();
-				std::map<std::string, std::any> pkt = pkt_read(p, {{{"X", &typeid(double)}, {"Y", &typeid(double)}, {"Z", &typeid(double)}, {"Ground", &typeid(bool)}}, {"X", "Y", "Z", "Ground"}});
+				std::map<std::string, std::any> pkt = pkt_read(p, 
+				{{{"X", &typeid(double)}, 
+				{"Y", &typeid(double)}, 
+				{"Z", &typeid(double)}, 
+				{"Ground", &typeid(bool)}}, 
+				{"X", "Y", "Z", "Ground"}});
 				pos.x = std::any_cast<double>(pkt["X"]);
 				pos.y = std::any_cast<double>(pkt["Y"]);
 				pos.z = std::any_cast<double>(pkt["Z"]);
