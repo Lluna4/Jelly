@@ -1,46 +1,65 @@
-#include "../libs/packet_read.hpp"
-#include "../libs/utils.hpp"
 #include <iostream>
-#include <cstring>
-#include <stdlib.h>
-#include <vector>
-#include <chrono>
-#if defined(__linux__)
-#  include <endian.h>
-#elif defined(__FreeBSD__) || defined(__NetBSD__)
-#  include <sys/endian.h>
-#elif defined(__OpenBSD__)
-#  include <sys/types.h>
-#  define be16toh(x) betoh16(x)
-#  define be32toh(x) betoh32(x)
-#  define be64toh(x) betoh64(x)
-#endif
+#include <string>
+#include <map>
+#include <any>
+#include <typeinfo>
+#include <stdexcept>
 
-int main()
-{
-    using std::chrono::high_resolution_clock;
-	using std::chrono::duration_cast;
-	using std::chrono::duration;
-	using std::chrono::milliseconds;
+class PacketWrapper {
+public:
+    // Constructor to initialize the map
+    PacketWrapper(const std::map<std::string, std::any>& pkt) : pkt(pkt) {}
 
-    char *buf = (char *)calloc(20, sizeof(char));
-    int a = 21;
-    int conv = htobe32((*(uint32_t *)&a));
-    buf[4] = 'a';
-    
-    std::memcpy(buf, &conv, sizeof(int));
-    packet aa = {0, 5, buf};
-    std::map<std::string, const std::type_info*> types = {{"var", &typeid(int)}, {"char", &typeid(char)}};
-    std::vector<std::string> index = {"var", "char"};
-    indexed_map aaa = {types, index};
-    auto t1 = high_resolution_clock::now();
-    std::map<std::string, std::any> map = pkt_read(aa, aaa);
-	auto t2 = high_resolution_clock::now();
-	auto ms_int = duration_cast<milliseconds>(t2 - t1);
+    // Templated get function to perform casting
+    template<typename T>
+    T get(const std::string& key) const {
+        auto it = pkt.find(key);
+        if (it != pkt.end()) {
+            try {
+                return std::any_cast<T>(it->second);
+            } catch (const std::bad_any_cast& e) {
+                throw std::runtime_error("Bad any_cast for key: " + key + ", expected type: " + typeid(T).name());
+            }
+        } else {
+            throw std::runtime_error("Key not found: " + key);
+        }
+    }
 
-	duration<double, std::milli> ms_double = t2 - t1;
-	std::cout << "Time to process: ";
-	std::cout << ms_double.count() << "ms\n";
-    std::cout << std::any_cast<int>(map["var"]) << std::endl;
-    std::cout << std::any_cast<char>(map["char"]) << std::endl;
+private:
+    std::map<std::string, std::any> pkt;
+};
+
+// Dummy pkt_read function for demonstration
+std::map<std::string, std::any> pkt_read(/* packet type */) {
+    // Dummy implementation
+    std::map<std::string, std::any> pkt;
+    pkt["X"] = 1.0;
+    pkt["Y"] = 2.0;
+    pkt["Z"] = 3.0;
+    pkt["Ground"] = true;
+    return pkt;
 }
+
+int main() {
+    // Assuming pkt_read function returns the packet as a map
+    auto raw_pkt = pkt_read(/* packet data */);
+
+    // Wrap the raw packet map
+    PacketWrapper pkt(raw_pkt);
+
+    // Use the wrapper to access and automatically cast values
+    try {
+        // Explicitly specify the type when using the get method
+        double x = pkt.get<double>("X");
+        double y = pkt.get<double>("Y");
+        double z = pkt.get<double>("Z");
+        bool ground = pkt.get<bool>("Ground");
+
+        std::cout << "X: " << x << "\nY: " << y << "\nZ: " << z << "\nGround: " << std::boolalpha << ground << std::endl;
+    } catch (const std::exception& e) {
+        std::cerr << "Exception: " << e.what() << std::endl;
+    }
+
+    return 0;
+}
+

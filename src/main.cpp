@@ -402,8 +402,8 @@ int execute_pkt(packet p, int state, User &user, int index)
 				indexed_map m = {.map = {
 					{"uname", &typeid(minecraft::string)}},
 				.index = {"uname"}};
-				std::map<std::string, std::any> pkt = pkt_read(p, m);
-				uname = std::any_cast<minecraft::string>(pkt["uname"]).string;
+				Packet pkt = pkt_read(p, m);
+				uname = pkt.get<minecraft::string>("uname").string;
 				if (std::filesystem::exists(uname))
 				{
 					user.from_file(uname);
@@ -442,9 +442,9 @@ int execute_pkt(packet p, int state, User &user, int index)
 					{"Allow server listings", &typeid(bool)}}, 
 					.index {"Locale", "View distance", "Chat mode", "Chat colors", "Skin parts", "Main hand", "Text Filtering", "Allow server listings"}
 				};
-				std::map<std::string, std::any> pkt = pkt_read(p, m);
-				user.set_locale(std::any_cast<minecraft::string>(pkt["Locale"]).string);
-				user.set_render_distance(std::any_cast<char>(pkt["View distance"]));
+				Packet pkt = pkt_read(p, m);
+				user.set_locale(pkt.get<minecraft::string>("Locale").string);
+				user.set_render_distance(pkt.get<char>("View distance"));
 				log("New locale: ", user.get_locale());
 				log("New render distance: ", user.get_render_distance());
 				registry_data(user);
@@ -464,8 +464,8 @@ int execute_pkt(packet p, int state, User &user, int index)
 		case 1:
 			if (state == 1)
 			{
-				std::map<std::string, std::any> pkt = pkt_read(p, {{{"Ping id", &typeid(long)}}, {"Ping id"}});
-				next_tick_pkt.emplace_back(packet_def({&typeid(long)}, {std::any_cast<long>(pkt["Ping id"])}, user, p.id));
+				Packet pkt = pkt_read(p, {{{"Ping id", &typeid(long)}}, {"Ping id"}});
+				next_tick_pkt.emplace_back(packet_def({&typeid(long)}, {pkt.get<long>("Ping id")}, user, p.id));
 				close(user.get_socket());
 				remove_from_list(user.get_socket(), epfd);
 				users.erase(user.get_socket());
@@ -598,8 +598,8 @@ int execute_pkt(packet p, int state, User &user, int index)
 		case 0x0A:
 			if (state == 10)
 			{
-				std::map<std::string, std::any> pkt = pkt_read(p, {{{"Id", &typeid(minecraft::varint)}, {"Command", &typeid(minecraft::string)}}, {"Id", "Command"}});
-				if (std::string("pronouns").starts_with(std::any_cast<minecraft::string>(pkt["Command"]).string))
+				Packet pkt = pkt_read(p, {{{"Id", &typeid(minecraft::varint)}, {"Command", &typeid(minecraft::string)}}, {"Id", "Command"}});
+				if (std::string("pronouns").starts_with(pkt.get<minecraft::string>("Command").string))
 				{
 					next_tick_pkt.emplace_back(packet_def(
 						{
@@ -608,7 +608,7 @@ int execute_pkt(packet p, int state, User &user, int index)
 						&typeid(minecraft::string), &typeid(bool)
 						},
 						{
-						std::any_cast<minecraft::varint>(pkt["id"]), (minecraft::varint){.num = 0},
+						pkt.get<minecraft::varint>("id"), (minecraft::varint){.num = 0},
 						(minecraft::varint){.num = std::string("pronouns").length()},
 						(minecraft::varint){.num = 1},
 						(minecraft::string){.len = std::string("pronouns").length(),
@@ -622,8 +622,8 @@ int execute_pkt(packet p, int state, User &user, int index)
 		case 0x15:
 			if (state == 10)
 			{
-				std::map<std::string, std::any> pkt = pkt_read(p, {{{"KeepID", &typeid(long)}}, {"KeepID"}});
-				log("Keep alive received: ", std::any_cast<long>(pkt["KeepID"]), "!!!!!!!!!!!!!!!");
+				Packet pkt = pkt_read(p, {{{"KeepID", &typeid(long)}}, {"KeepID"}});
+				log("Keep alive received: ", pkt.get<long>("KeepID"), "!!!!!!!!!!!!!!!");
 			}
 			break;
 		case 0x17:
@@ -632,16 +632,16 @@ int execute_pkt(packet p, int state, User &user, int index)
 				char *ptr = p.data;
 				bool on_ground = true;
 				position pos = user.get_position();
-				std::map<std::string, std::any> pkt = pkt_read(p, 
-				{{{"X", &typeid(double)}, 
-				{"Y", &typeid(double)}, 
-				{"Z", &typeid(double)}, 
-				{"Ground", &typeid(bool)}}, 
-				{"X", "Y", "Z", "Ground"}});
-				pos.x = std::any_cast<double>(pkt["X"]);
-				pos.y = std::any_cast<double>(pkt["Y"]);
-				pos.z = std::any_cast<double>(pkt["Z"]);
-				on_ground = std::any_cast<bool>(pkt["Ground"]);
+				Packet pkt = pkt_read(p, 
+					{{{"X", &typeid(double)}, 
+					{"Y", &typeid(double)}, 
+					{"Z", &typeid(double)}, 
+					{"Ground", &typeid(bool)}}, 
+					{"X", "Y", "Z", "Ground"}});
+				pos.x = pkt.get<double>("X");
+				pos.y = pkt.get<double>("Y");
+				pos.z = pkt.get<double>("Z");
+				on_ground = pkt.get<bool>("Ground");
 				pos.yaw = pos.yaw;
 				pos.pitch = pos.pitch;
 				update_pos_to_users(user, pos, on_ground);
@@ -670,13 +670,13 @@ int execute_pkt(packet p, int state, User &user, int index)
 				char *ptr = p.data;
 				position pos = user.get_position();
 				bool on_ground = true;
-				std::map<std::string, std::any> pkt = pkt_read(p, {{{"X", &typeid(double)}, {"Y", &typeid(double)}, {"Z", &typeid(double)}, {"Yaw", &typeid(float)}, {"Pitch", &typeid(float)},{"Ground", &typeid(bool)}}, {"X", "Y", "Z", "Yaw", "Pitch","Ground"}});
-				pos.x = std::any_cast<double>(pkt["X"]);
-				pos.y = std::any_cast<double>(pkt["Y"]);
-				pos.z = std::any_cast<double>(pkt["Z"]);
-				pos.yaw = std::any_cast<float>(pkt["Yaw"]);
-				pos.pitch = std::any_cast<float>(pkt["Pitch"]);
-				on_ground = std::any_cast<bool>(pkt["Ground"]);
+				Packet pkt = pkt_read(p, {{{"X", &typeid(double)}, {"Y", &typeid(double)}, {"Z", &typeid(double)}, {"Yaw", &typeid(float)}, {"Pitch", &typeid(float)},{"Ground", &typeid(bool)}}, {"X", "Y", "Z", "Yaw", "Pitch","Ground"}});
+				pos.x = pkt.get<double>("X");
+				pos.y = pkt.get<double>("Y");
+				pos.z = pkt.get<double>("Z");
+				pos.yaw = pkt.get<float>("Yaw");
+				pos.pitch = pkt.get<float>("Pitch");
+				on_ground = pkt.get<bool>("Ground");
 				update_pos_to_users(user, pos, on_ground);
 				user.update_position(pos);
 				log_header();
@@ -699,14 +699,17 @@ int execute_pkt(packet p, int state, User &user, int index)
 		case 0x21:
 			if (state == 10)
 			{
-				char *ptr = p.data;
-				minecraft::varint status = minecraft::read_varint(ptr);
-				ptr++;
-				if (status.num == 0)
+				Packet pkt = pkt_read(p, {{
+					{"Status", &typeid(minecraft::varint)},
+					{"Position", &typeid(long)},
+					{"Face", &typeid(char)},
+					{"Sequence id", &typeid(minecraft::varint)}},
+					{"Status", "Position", "Face", "Sequence id"}});
+				
+				if (pkt.get<minecraft::varint>("Status").num == 0)
 				{
-					unsigned long val = read_position(ptr);
-					ptr += sizeof(long);
-					minecraft::varint face = minecraft::read_varint(ptr);
+
+					long val = pkt.get<long>("Position");
 					std::int32_t orig_x,orig_y, orig_z;
 
 					std::int32_t x = val >> 38;
@@ -752,6 +755,7 @@ int execute_pkt(packet p, int state, User &user, int index)
 					chun.chunks[y].blocks.block_indexes_nums = chunk;
 					auto c = chunks_r.find({.x = (orig_x >> 4), .z = (orig_z >> 4)});
 					c->second = chun;
+					pkt_send({&typeid(minecraft::varint)}, {pkt.get<minecraft::varint>("Sequence id")}, user, 0x05);
 					for (auto& value: users)
 					{
 						send_chunk(value.second, (orig_x >> 4), (orig_z >> 4));
@@ -778,14 +782,24 @@ int execute_pkt(packet p, int state, User &user, int index)
 						user.set_sneaking(false);
 				};
 			}
+			break;
 		case 0x35:
 			if (state == 10)
 			{
-				char *ptr = p.data;
-				ptr++;
-				long val = read_position(ptr);
-				ptr += sizeof(long);
-				minecraft::varint face = minecraft::read_varint(ptr);
+				Packet pkt = pkt_read(p,
+				{{
+					{"Hand", &typeid(minecraft::varint)},
+					{"Position", &typeid(long)},
+					{"Face", &typeid(minecraft::varint)},
+					{"CursorX", &typeid(float)},
+					{"CursorY", &typeid(float)}, 
+					{"CursorZ", &typeid(float)},
+					{"Inside block", &typeid(bool)},
+					{"Sequence id", &typeid(minecraft::varint)}}, 
+					{"Hand", "Position", "Face", "CursorX", "CursorY", "CursorZ", "Sequence id"}});
+				
+				long val = pkt.get<long>("Position");
+				minecraft::varint face = pkt.get<minecraft::varint>("Face");
 				std::int32_t orig_x,orig_y, orig_z;
 
 				std::int32_t x = val >> 38;
@@ -843,6 +857,7 @@ int execute_pkt(packet p, int state, User &user, int index)
 				chun.chunks[y].blocks.block_indexes_nums = chunk;
 				auto c = chunks_r.find({.x = (orig_x >> 4), .z = (orig_z >> 4)});
 				c->second = chun;
+				pkt_send({&typeid(minecraft::varint)}, {pkt.get<minecraft::varint>("Sequence id")}, user, 0x05);
 				for (auto& value: users)
 				{
 					send_chunk(value.second, (orig_x >> 4), (orig_z >> 4));

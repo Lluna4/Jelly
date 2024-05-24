@@ -34,14 +34,14 @@ class Packet
             }
             else
             {
-                return std::any_cast<T>(val->second());
+                return std::any_cast<T>(val->second);
             }
         }
     private:
         std::map<std::string, std::any> data_;
 };
 
-std::map<std::string, std::any> pkt_read(packet p, indexed_map types)
+Packet pkt_read(packet p, indexed_map types)
 {
     std::map<std::string, std::any> ret;
     int size = p.buf_size;
@@ -193,5 +193,5 @@ std::map<std::string, std::any> pkt_read(packet p, indexed_map types)
             size += varint_size;
         }
     }
-    return ret;
+    return Packet(ret);
 }
