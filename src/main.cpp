@@ -465,7 +465,7 @@ int execute_pkt(packet p, int state, User &user, int index)
 			if (state == 1)
 			{
 				Packet pkt = pkt_read(p, {{{"Ping id", &typeid(long)}}, {"Ping id"}});
-				next_tick_pkt.emplace_back(packet_def({&typeid(long)}, {pkt.get<long>("Ping id")}, user, p.id));
+				pkt_send({&typeid(long)}, {pkt.get<long>("Ping id")}, user, p.id);
 				close(user.get_socket());
 				remove_from_list(user.get_socket(), epfd);
 				users.erase(user.get_socket());
