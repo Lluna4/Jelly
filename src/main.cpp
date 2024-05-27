@@ -540,11 +540,12 @@ int execute_pkt(packet p, int state, User &user, int index)
 					},
 					user, 0x20
 				));
-				set_center_chunk(user);
+				set_center_chunk(user, pos.x/16, pos.z/16);
 				int render_distance = user.get_render_distance();
-				for (int x = (abs(render_distance) * -1); x < abs(render_distance); x++)
+				int chunk_pos_x = pos.x/16, chunk_pos_z = pos.z/16;
+				for (int x = chunk_pos_x - (render_distance/2); x < chunk_pos_x + (render_distance/2); x++)
 				{
-					for (int z = (abs(render_distance) * -1); z <= abs(render_distance); z++)
+					for (int z = chunk_pos_z - (render_distance/2); z <= chunk_pos_z + (render_distance/2); z++)
 					{
 						send_chunk(user, x, z);
 					}
@@ -648,7 +649,7 @@ int execute_pkt(packet p, int state, User &user, int index)
 				update_pos_to_users(user, pos, on_ground);
 				user.update_position(pos);
 				log_header();
-				std::cout << "New pos: x: " << pos.x << " y: " << pos.y << " z: " << pos.z << " yaw: " << pos.yaw << " pitch: " << pos.pitch << std::endl;
+				log(std::format("New pos: x: {} y: {} z: {} yaw {} pitch {}", pos.x, pos.y, pos.z, pos.yaw, pos.pitch));
 				//next_tick_pkt.emplace_back(packet_def({&typeid(long)},{(long)0},user, 0x24);
 				
 				/*if (pos.y <= 500.0f)
@@ -681,7 +682,7 @@ int execute_pkt(packet p, int state, User &user, int index)
 				update_pos_to_users(user, pos, on_ground);
 				user.update_position(pos);
 				log_header();
-				std::cout << "New pos2: x: " << pos.x << " y: " << pos.y << " z: " << pos.z << " yaw: " << pos.yaw << " pitch: " << pos.pitch << std::endl;
+				log(std::format("New pos2: x: {} y: {} z: {} yaw {} pitch {}", pos.x, pos.y, pos.z, pos.yaw, pos.pitch));
 				//next_tick_pkt.emplace_back(packet_def({&typeid(long)},{(long)0},user, 0x24);
 				/*if (pos.y <= 500.0f)
 				{
@@ -918,9 +919,7 @@ User read_ev(char *pkt, int sock, User user)
 	auto ms_int = duration_cast<milliseconds>(t2 - t1);
 
 	duration<double, std::milli> ms_double = t2 - t1;
-	log_header();
-	std::cout << "Time to process: ";
-	std::cout << ms_double.count() << "ms\n";
+	log(std::format("Time to process: {}ms", ms_double.count()));
 	return user;
 }
 
@@ -1054,6 +1053,11 @@ int main()
 	int epfd = create_instance();
 	int sock = socket(AF_INET, SOCK_STREAM, 0);
 
+	if (std::filesystem::exists("logs") == false)
+	{
+		std::filesystem::create_directory("logs");
+		log("Created logging folder!");
+	}
 	if (std::filesystem::exists("server.properties") == false)
 	{
 		create_config();

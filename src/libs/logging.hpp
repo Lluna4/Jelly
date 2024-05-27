@@ -68,43 +68,65 @@ std::string get_time()
 	return std::format("{:%OH:%OM:%OS}", std::chrono::system_clock::now());
 }
 
+void write_to_file(std::string log_msg)
+{
+	std::ofstream file;
+	file.open("logs/latest.txt", std::ios::out | std::ios::app);
+	file << log_msg << std::endl;
+	file.close();
+}
+
 template<typename T>
 void log(T value)
 {
+	std::string log_msg = std::format("[{}] {}", get_time(), value);
     std::println("[{}] {}", get_time(), value);
+	write_to_file(log_msg);
 }
 
 template<typename T>
 void log(T value, T value2)
 {
+	std::string log_msg = std::format("[{}] {}{}", get_time(), value, value2);
     std::println("[{}] {}{}", get_time(), value, value2);
+	write_to_file(log_msg);
 }
 
 template<typename T>
 void log_err(T value)
 {
+	std::string log_msg = std::format("\x1B[91m[{}] {}\033[0m\t\t", get_time(), value);
     std::println("\x1B[91m[{}] {}\033[0m\t\t", get_time(), value);
+	write_to_file(log_msg);
 }
 
 template<typename T, typename B>
 void log_err(T value, B value2)
 {
+	std::string log_msg = std::format("\x1B[91m[{}] {}{}\033[0m\t\t", get_time(), value, value2);
     std::println("\x1B[91m[{}] {}{}\033[0m\t\t", get_time(), value, value2);
+	write_to_file(log_msg);
 }
 
 template<typename T, typename B>
 void log(T value, B value2, T value3)
 {
+	std::string log_msg = std::format("[{}] {}{}{}", get_time(), value, value2, value3);
     std::println("[{}] {}{}{}", get_time(), value, value2, value3);
+	write_to_file(log_msg);
 }
 
 template<typename T, typename B>
 void log(T value, B value2)
 {
+	std::string log_msg = std::format("[{}] {}{}", get_time(), value, value2);
     std::println("[{}] {}{}", get_time(), value, value2);
+	write_to_file(log_msg);
 }
 
 void log_header()
 {
+	std::string log_msg = std::format("[{}] ", get_time());
     std::print("[{}] ", get_time());
+	write_to_file(log_msg);
 }
