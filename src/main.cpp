@@ -14,6 +14,7 @@
 #include <nlohmann/json.hpp>
 #include <iterator>
 #include <fstream>
+#include <utility>
 #include "libs/test_epoll.hpp"
 #include <sys/epoll.h>
 #include "libs/world_gen.hpp"
@@ -719,16 +720,6 @@ int execute_pkt(packet p, int state, User &user, int index)
 					orig_z = z;
 					orig_y = y;
 					position user_pos = user.get_position();
-					if (user.get_sneaking() == true)
-					{
-						if (abs(orig_x - nearbyint(user_pos.x)) < 2 && orig_y == floor(user_pos.y)&& abs(orig_z - nearbyint(user_pos.z)) < 2)
-							break;
-					}
-					else
-					{
-						if (orig_x == floor(user_pos.x) && orig_y == floor(user_pos.y)&& orig_z == floor(user_pos.z))
-							break;
-					}
 					x = rem_euclid(x, 16);
 					y = floor((((y)+ 64)/16));
 					int y_chunk_y = rem_euclid(orig_y, 16);
@@ -874,6 +865,9 @@ int execute_pkt(packet p, int state, User &user, int index)
 				}*/
 			}
 			break;
+		default:
+			break;
+
 	}
 	return ret;
 }
@@ -903,9 +897,6 @@ User read_ev(char *pkt, int sock, User user)
 	auto t1 = high_resolution_clock::now();
 	packets_to_process = process_packet(pkt);
 	int state = user.get_state();
-	
-	log("State", state);
-	log("Size: ", users.size());
 	for (int i = 0; i < packets_to_process.size(); i++)
 	{
 		log("********************");
@@ -916,14 +907,10 @@ User read_ev(char *pkt, int sock, User user)
 		std::cout << "Data: ";
 		for (int x = 0; x < packets_to_process[i].size; x++)
 		{
-			if (isalnum(packets_to_process[i].data[x]))
-				printf("%c ", packets_to_process[i].data[x]);
-			else
-				printf("%02hhX ", (int)packets_to_process[i].data[x]);
+				std::print(" {:#x} ", packets_to_process[i].data[x]);
 		}
-		std::cout << "\n";
+		std::println();
 		state = execute_pkt(packets_to_process[i], state, user, 0);
-		log("state", state);
 		user.set_state(state);
 		free(packets_to_process[i].data);
 	}

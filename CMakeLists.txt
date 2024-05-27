@@ -14,7 +14,7 @@ add_subdirectory(nlohmann_json)
 #set(OPENSSL_USE_STATIC_LIBS TRUE)
 find_package(OpenSSL REQUIRED)
 # Set compile options
-add_compile_options(-std=c++20)
+add_compile_options(-std=c++23)
 
 # Define the executable
 add_executable(jelly src/main.cpp)
