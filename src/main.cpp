@@ -50,7 +50,7 @@ void commands(User user)
 	//only /pronoun command
 	std::string pron = "pronouns";
 	minecraft::node_root root_node;
-	if (user.get_uname().compare("Alexandra") == 0 || user.get_uname().compare("carlyjb17") == 0)
+	if (user.get_uname().compare("Alexandra") == 0 || user.get_uname().compare("Llunaa4") == 0)
 		root_node = {.children_num = {.num = 3},
 			.children_index = {(minecraft::varint){.num = 1}, (minecraft::varint){.num = 2}, (minecraft::varint){.num = 3}}};
 	else
