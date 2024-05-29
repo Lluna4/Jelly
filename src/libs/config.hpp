@@ -10,6 +10,7 @@ std::string SV_IP = "0.0.0.0";
 std::string motd = "A Minecraft Server";
 std::string dc_msg = "Server in development";
 std::string icon_path = "favicon.png";
+int sv_render_distance = 8;
 
 bool isNumber(std::string a)
 {
@@ -52,6 +53,7 @@ void create_config()
     cfg << "motd=A Minecraft Server\n";
     cfg << "test-disconnect-msg=Server in development\n";
     cfg << "icon-path=favicon.png\n";
+    cfg << "server-render-distance=8\n";
     cfg.close();
 }
 
@@ -95,6 +97,13 @@ void load_config()
                 if (tokens.size() > 1)
                 {
                     icon_path = tokens[1];
+                }
+            }
+            else if (tokens[0].compare("server-render-distance") == 0)
+            {
+                if (tokens.size() > 1)
+                {
+                    sv_render_distance = std::atoi(tokens[1].c_str());
                 }
             }
         }

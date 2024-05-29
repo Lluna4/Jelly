@@ -35,6 +35,10 @@ struct position
     double x, y, z;
     float yaw, pitch;
 };
+struct chunk_pos
+{
+    int x, y;
+};
 
 class User
 {
@@ -42,6 +46,7 @@ class User
         User() 
         {
             pos = {.x = 0.0f, .y = 64.0f, .z = 0.0f, .yaw = 0.0f, .pitch = 0.0f};
+            chunk_p = {.x = 0, .y = 0};
             pronouns = "they/them";
             state = 0;
             on_ground = true;
@@ -53,6 +58,7 @@ class User
         {
             uuid_.generate(uname_);
             pos = {.x = 0.0f, .y = 64.0f, .z = 0.0f, .yaw = 0.0f, .pitch = 0.0f};
+            chunk_p = {.x = 0, .y = 0};
             pronouns = "they/them";
             state = 0;
             on_ground = true;
@@ -90,6 +96,12 @@ class User
         void update_position(position p)
         {
             pos = p;
+            chunk_p = {.x = (int)(p.x/16), .y = (int)(p.z/16)};
+        }
+
+        struct chunk_pos get_chunk_position()
+        {
+            return chunk_p;
         }
 
         struct position get_position()
@@ -198,6 +210,7 @@ class User
                     pos.x = std::stod(tokens[2]);
                     pos.y = std::stod(tokens[3]);
                     pos.z = std::stod(tokens[4]);
+                    chunk_p = {.x = (int)(pos.x/16), .y = (int)(pos.z/16)};
                     break;
                 case 4:
                     pronouns = line;
@@ -216,6 +229,7 @@ class User
         struct position pos;
         std::string pronouns;
         int state;
+        struct chunk_pos chunk_p;
         bool on_ground;
         bool sneaking;
 };
