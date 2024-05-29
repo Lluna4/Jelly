@@ -12,6 +12,14 @@
 	#pragma warn("No hay <format>")
 #endif
 
+std::string file_name;
+
+void generate_file_name()
+{
+	file_name = std::format("logs/log_{:%Od-%Om-%Oy_%OH-%OM-%OS}.txt", std::chrono::system_clock::now());
+	std::println("File name {}", file_name);
+}
+
 static int	ft_intlen(int n)
 {
 	int	ret;
@@ -71,7 +79,7 @@ std::string get_time()
 void write_to_file(std::string log_msg)
 {
 	std::ofstream file;
-	file.open("logs/latest.txt", std::ios::out | std::ios::app);
+	file.open(file_name, std::ios::out | std::ios::app);
 	file << log_msg << std::endl;
 	file.close();
 }

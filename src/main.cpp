@@ -1053,11 +1053,13 @@ int main()
 	int epfd = create_instance();
 	int sock = socket(AF_INET, SOCK_STREAM, 0);
 
+	
 	if (std::filesystem::exists("logs") == false)
 	{
 		std::filesystem::create_directory("logs");
 		log("Created logging folder!");
 	}
+	generate_file_name();
 	if (std::filesystem::exists("server.properties") == false)
 	{
 		create_config();
