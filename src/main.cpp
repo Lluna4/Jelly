@@ -540,9 +540,12 @@ int execute_pkt(packet p, int state, User &user, int index)
 					},
 					user, 0x20
 				));
-				set_center_chunk(user, pos.x/16, pos.z/16);
+				chunk_pos p = user.get_chunk_position();
+				set_center_chunk(user, p.x, p.y);
 				int render_distance = sv_render_distance;
-				int chunk_pos_x = user.get_chunk_position().x, chunk_pos_z = user.get_chunk_position().y;
+				if (user.get_render_distance() < sv_render_distance)
+					render_distance = user.get_render_distance();
+				int chunk_pos_x = p.x, chunk_pos_z = p.y;
 				for (int x = chunk_pos_x - (render_distance/2); x < chunk_pos_x + (render_distance/2); x++)
 				{
 					for (int z = chunk_pos_z - (render_distance/2); z <= chunk_pos_z + (render_distance/2); z++)
@@ -646,6 +649,17 @@ int execute_pkt(packet p, int state, User &user, int index)
 				on_ground = pkt.get<bool>("Ground");
 				pos.yaw = pos.yaw;
 				pos.pitch = pos.pitch;
+				chunk_pos chunk_p = user.get_chunk_position();
+				if (pos.x/16 != chunk_p.x || pos.z/16 != chunk_p.y)
+				{
+					for (int x = (pos.x/16 - chunk_p.x); x < chunk_p.x + (pos.x/16 - chunk_p.x); x++)
+					{
+						for (int z = (pos.z/16 - chunk_p.y); z <= chunk_p.y + (pos.z/16 - chunk_p.y); z++)
+						{
+							send_chunk(user, x, z);
+						}
+					}
+				}
 				update_pos_to_users(user, pos, on_ground);
 				user.update_position(pos);
 				log_header();
@@ -679,6 +693,17 @@ int execute_pkt(packet p, int state, User &user, int index)
 				pos.yaw = pkt.get<float>("Yaw");
 				pos.pitch = pkt.get<float>("Pitch");
 				on_ground = pkt.get<bool>("Ground");
+				chunk_pos chunk_p = user.get_chunk_position();
+				if (pos.x/16 != chunk_p.x || pos.z/16 != chunk_p.y)
+				{
+					for (int x = (pos.x/16 - chunk_p.x); x < chunk_p.x + (pos.x/16 - chunk_p.x); x++)
+					{
+						for (int z = (pos.z/16 - chunk_p.y); z <= chunk_p.y + (pos.z/16 - chunk_p.y); z++)
+						{
+							send_chunk(user, x, z);
+						}
+					}
+				}
 				update_pos_to_users(user, pos, on_ground);
 				user.update_position(pos);
 				log_header();
