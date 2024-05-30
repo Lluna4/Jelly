@@ -4,6 +4,7 @@
 #include <iostream>
 #include <fstream>
 #include <string>
+#include <math.h>
 #include "tokenize.hpp"
 #include "logging.hpp"
 #include "utils.hpp"
@@ -96,7 +97,7 @@ class User
         void update_position(position p)
         {
             pos = p;
-            chunk_p = {.x = (int)(p.x/16), .y = (int)(p.z/16)};
+            chunk_p = {.x = (int)floor(p.x/16.0f), .y = (int)floor(p.z/16.0f)};
         }
 
         struct chunk_pos get_chunk_position()

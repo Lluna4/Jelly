@@ -382,6 +382,25 @@ void update_pos_rot_to_users(User user, position pos, bool on_ground)
 	}
 	
 }
+
+void send_visible_chunks(User user, bool center = true)
+{
+	chunk_pos p = user.get_chunk_position();
+	if (center == true)
+		set_center_chunk(user, p.x, p.y);
+	int render_distance = sv_render_distance;
+	if (user.get_render_distance() < sv_render_distance)
+		render_distance = user.get_render_distance();
+	int chunk_pos_x = p.x, chunk_pos_z = p.y;
+	for (int x = chunk_pos_x - (render_distance/2); x < chunk_pos_x + (render_distance/2); x++)
+	{
+		for (int z = chunk_pos_z - (render_distance/2); z <= chunk_pos_z + (render_distance/2); z++)
+		{
+			send_chunk(user, x, z);
+		}
+	}
+}
+
 int execute_pkt(packet p, int state, User &user, int index)
 {
 	int ret = state;
@@ -540,19 +559,7 @@ int execute_pkt(packet p, int state, User &user, int index)
 					},
 					user, 0x20
 				));
-				chunk_pos p = user.get_chunk_position();
-				set_center_chunk(user, p.x, p.y);
-				int render_distance = sv_render_distance;
-				if (user.get_render_distance() < sv_render_distance)
-					render_distance = user.get_render_distance();
-				int chunk_pos_x = p.x, chunk_pos_z = p.y;
-				for (int x = chunk_pos_x - (render_distance/2); x < chunk_pos_x + (render_distance/2); x++)
-				{
-					for (int z = chunk_pos_z - (render_distance/2); z <= chunk_pos_z + (render_distance/2); z++)
-					{
-						send_chunk(user, x, z);
-					}
-				}
+				send_visible_chunks(user);
 				send_tab();
 				system_chat(std::format("§e{} connected", user.get_uname()));
 				commands(user);
@@ -650,15 +657,10 @@ int execute_pkt(packet p, int state, User &user, int index)
 				pos.yaw = pos.yaw;
 				pos.pitch = pos.pitch;
 				chunk_pos chunk_p = user.get_chunk_position();
-				if (pos.x/16 != chunk_p.x || pos.z/16 != chunk_p.y)
+				if (floor(pos.x/16.0f) != chunk_p.x || floor(pos.z/16.0f) != chunk_p.y)
 				{
-					for (int x = (pos.x/16 - chunk_p.x); x < chunk_p.x + (pos.x/16 - chunk_p.x); x++)
-					{
-						for (int z = (pos.z/16 - chunk_p.y); z <= chunk_p.y + (pos.z/16 - chunk_p.y); z++)
-						{
-							send_chunk(user, x, z);
-						}
-					}
+					send_visible_chunks(user, false);
+					system_chat("You moved chunks!");
 				}
 				update_pos_to_users(user, pos, on_ground);
 				user.update_position(pos);
@@ -694,15 +696,10 @@ int execute_pkt(packet p, int state, User &user, int index)
 				pos.pitch = pkt.get<float>("Pitch");
 				on_ground = pkt.get<bool>("Ground");
 				chunk_pos chunk_p = user.get_chunk_position();
-				if (pos.x/16 != chunk_p.x || pos.z/16 != chunk_p.y)
+				if (floor(pos.x/16.0f) != chunk_p.x || floor(pos.z/16.0f) != chunk_p.y)
 				{
-					for (int x = (pos.x/16 - chunk_p.x); x < chunk_p.x + (pos.x/16 - chunk_p.x); x++)
-					{
-						for (int z = (pos.z/16 - chunk_p.y); z <= chunk_p.y + (pos.z/16 - chunk_p.y); z++)
-						{
-							send_chunk(user, x, z);
-						}
-					}
+					send_visible_chunks(user, false);
+					system_chat("You moved chunks");
 				}
 				update_pos_to_users(user, pos, on_ground);
 				user.update_position(pos);
