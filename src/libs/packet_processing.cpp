@@ -31,8 +31,9 @@ std::vector<packet> process_packet(char *pkt)
 		next = pkt + (p.size + 1);
 		pkt += size_size;
         p.id = *pkt;
-		if (p.size < 0)
+		if (p.size < 0 || p.id > 0x36)
 		{
+			p.id = 0x38;
 			p.size = 0;
 			p.data = 0;
 			packets.push_back(p);

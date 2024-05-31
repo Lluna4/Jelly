@@ -162,9 +162,23 @@ minecraft::chunk_rw chunk_gen_r()
 	return chunks;
 }
 
+minecraft::chunk_rw chunk_gen_empty()
+{
+	int in = 0;
+	minecraft::chunk_rw chunks;
+	while (in < 24)
+	{
+		minecraft::chunk_section_rw new_chunk;
+		new_chunk = {.block_count = 0, .blocks = world_gen_inderect_empty(), .biome = biome_gen()};
+		chunks.chunks.push_back(new_chunk);
+		in++;
+	}
+	return chunks;
+}
+
 minecraft::chunk_rw find_chunk(minecraft::chunk_pos pos)
 {
-    std::cout << "X " << pos.x << "Z " << pos.z << std::endl;
+    //std::cout << "X " << pos.x << "Z " << pos.z << std::endl;
 	if (chunks_r.find(pos) == chunks_r.end()) //if it doesnt find a chunk it generates one
 	{
 		chunks_r.insert({pos, chunk_gen_r()});

@@ -97,7 +97,7 @@ class User
         void update_position(position p)
         {
             pos = p;
-            chunk_p = {.x = (int)floor(p.x/16.0f), .y = (int)floor(p.z/16.0f)};
+            chunk_p = {.x = (int)floor(p.x) >> 4, .y = (int)floor(p.z) >> 4};
         }
 
         struct chunk_pos get_chunk_position()

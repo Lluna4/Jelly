@@ -13,6 +13,7 @@
 #include <unordered_map>
 #include <nlohmann/json.hpp>
 #include <iterator>
+#include <cmath>
 #include <fstream>
 #include <utility>
 #include "libs/test_epoll.hpp"
@@ -44,7 +45,7 @@ std::vector<packet_def> next_tick_pkt;
 
 std::unordered_map<int, User> users;
 //minecraft::chunk empty_chunk;
-
+minecraft::chunk_rw chunk_empty;
 void commands(User user)
 {
 	//only /pronoun command
@@ -301,6 +302,21 @@ void send_chunk(User user, int x, int z)
 	next_tick_pkt.emplace_back(packet_def(types, values, user, 0x25));
 }
 
+void send_empty_chunk(User user, int x, int z)
+{
+	minecraft::chunk_rw chunk = chunk_empty;
+
+	minecraft::varint size = {.num = (unsigned long)chunk.size()};
+	std::vector<const std::type_info *> types = {&typeid(int), &typeid(int), &typeid(char), &typeid(char), &typeid(minecraft::varint), 
+		&typeid(minecraft::chunk_rw), &typeid(minecraft::varint), &typeid(minecraft::varint), &typeid(long),
+		&typeid(minecraft::varint), &typeid(long),&typeid(minecraft::varint),
+		&typeid(long),&typeid(minecraft::varint), &typeid(long), &typeid(minecraft::varint), &typeid(minecraft::varint)};
+	std::vector<std::any> values = {x, z, (char)0x0a, (char)0x00, size, chunk,
+	(minecraft::varint){.num = 0}, (minecraft::varint){.num = 1}, (long)0,(minecraft::varint){.num = 1}, (long)0,(minecraft::varint){.num = 1},
+	(long)0, (minecraft::varint){.num = 1}, (long)0,(minecraft::varint){.num = 0}, (minecraft::varint){.num = 0}};
+	next_tick_pkt.emplace_back(packet_def(types, values, user, 0x25));
+}
+
 
 
 void spawn_entities_to_user(User user)
@@ -392,11 +408,14 @@ void send_visible_chunks(User user, bool center = true)
 	if (user.get_render_distance() < sv_render_distance)
 		render_distance = user.get_render_distance();
 	int chunk_pos_x = p.x, chunk_pos_z = p.y;
-	for (int x = chunk_pos_x - (render_distance/2); x < chunk_pos_x + (render_distance/2); x++)
+	for (int x = chunk_pos_x - (render_distance/2); x < (chunk_pos_x + (render_distance/2)) + 1; x++)
 	{
-		for (int z = chunk_pos_z - (render_distance/2); z <= chunk_pos_z + (render_distance/2); z++)
+		for (int z = chunk_pos_z - (render_distance/2); z <= (chunk_pos_z + (render_distance/2)) + 1; z++)
 		{
-			send_chunk(user, x, z);
+			if (abs(x) == (chunk_pos_x + (render_distance/2)) + 1 || abs(z) == (chunk_pos_z + (render_distance/2)) + 1)
+				send_empty_chunk(user, x, z);
+			else
+				send_chunk(user, x, z);
 		}
 	}
 }
@@ -656,11 +675,16 @@ int execute_pkt(packet p, int state, User &user, int index)
 				on_ground = pkt.get<bool>("Ground");
 				pos.yaw = pos.yaw;
 				pos.pitch = pos.pitch;
-				chunk_pos chunk_p = user.get_chunk_position();
-				if (floor(pos.x/16.0f) != chunk_p.x || floor(pos.z/16.0f) != chunk_p.y)
+				if (std::isnormal(pos.x) == false || std::isnormal(pos.y) == false || std::isnormal(pos.z) == false)
 				{
-					send_visible_chunks(user, false);
-					system_chat("You moved chunks!");
+					log("Numbers received are not decoded correctly, skipping...");
+					break;
+				}
+				chunk_pos chunk_p = user.get_chunk_position();
+				if ((int)floor(pos.x) >> 4 != chunk_p.x || (int)floor(pos.z) >> 4 != chunk_p.y)
+				{
+					send_visible_chunks(user);
+					//system_chat("You moved chunks!");
 				}
 				update_pos_to_users(user, pos, on_ground);
 				user.update_position(pos);
@@ -695,11 +719,16 @@ int execute_pkt(packet p, int state, User &user, int index)
 				pos.yaw = pkt.get<float>("Yaw");
 				pos.pitch = pkt.get<float>("Pitch");
 				on_ground = pkt.get<bool>("Ground");
-				chunk_pos chunk_p = user.get_chunk_position();
-				if (floor(pos.x/16.0f) != chunk_p.x || floor(pos.z/16.0f) != chunk_p.y)
+				if (std::isnormal(pos.x) == false || std::isnormal(pos.y) == false || std::isnormal(pos.z) == false)
 				{
-					send_visible_chunks(user, false);
-					system_chat("You moved chunks");
+					log("Numbers received are not decoded correctly, skipping...");
+					break;
+				}
+				chunk_pos chunk_p = user.get_chunk_position();
+				if ((int)floor(pos.x) >> 4 != chunk_p.x || (int)floor(pos.z) >> 4 != chunk_p.y)
+				{
+					send_visible_chunks(user);
+					//system_chat("You moved chunks");
 				}
 				update_pos_to_users(user, pos, on_ground);
 				user.update_position(pos);
@@ -888,6 +917,8 @@ int execute_pkt(packet p, int state, User &user, int index)
 				}*/
 			}
 			break;
+		case 0x38:
+			log("BAD PACKET READ");
 		default:
 			break;
 
@@ -1014,7 +1045,7 @@ void game_loop(int epfd)
 			log("Sent packet id: ", (int)pkt.packet_id_);
 		}
 		next_tick_pkt.clear();
-		std::this_thread::sleep_for(std::chrono::milliseconds(50));
+		std::this_thread::sleep_for(std::chrono::milliseconds(45));
 	}
 }
 
@@ -1113,6 +1144,7 @@ int main()
 			find_chunk({.x = x, .z = z});
 		}
 	}
+	chunk_empty = chunk_gen_empty();
 	log("World generated!");
 	std::thread read_l(game_loop, epfd);
 	read_l.detach();
