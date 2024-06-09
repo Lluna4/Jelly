@@ -67,7 +67,7 @@ void commands(User user)
 	minecraft::node_argument args = {.children_num = 0, .name {.len = pron.length(), .string = pron},
 	.parser_id = {.num = 5}, .varies = {.num = 2} };
 	
-	if (user.get_uname().compare("Alexandra") == 0 || user.get_uname().compare("carlyjb17") == 0)
+	if (user.get_uname().compare("Alexandra") == 0 || user.get_uname().compare("Llunaa4") == 0)
 	{
 		std::string florecilla = "florecilla";
 
@@ -399,23 +399,37 @@ void update_pos_rot_to_users(User user, position pos, bool on_ground)
 	
 }
 
-void send_visible_chunks(User user, bool center = true)
+void send_visible_chunks(User user, bool center = true, bool only_sides = false)
 {
 	chunk_pos p = user.get_chunk_position();
 	if (center == true)
-		set_center_chunk(user, p.x, p.y);
+		set_center_chunk(user, (unsigned long)(*(unsigned int *)&p.x), (unsigned long)(*(unsigned int *)&p.y));
 	int render_distance = sv_render_distance;
 	if (user.get_render_distance() < sv_render_distance)
 		render_distance = user.get_render_distance();
-	int chunk_pos_x = p.x, chunk_pos_z = p.y;
-	for (int x = chunk_pos_x - (render_distance/2); x < (chunk_pos_x + (render_distance/2)) + 1; x++)
+	long chunk_pos_x = p.x, chunk_pos_z = p.y;
+
+	if (only_sides == true)
 	{
-		for (int z = chunk_pos_z - (render_distance/2); z <= (chunk_pos_z + (render_distance/2)) + 1; z++)
+		for (int x = chunk_pos_x - (render_distance); x < (chunk_pos_x + (render_distance)) + 1; x++)
 		{
-			if (abs(x) == (chunk_pos_x + (render_distance/2)) + 1 || abs(z) == (chunk_pos_z + (render_distance/2)) + 1)
-				send_empty_chunk(user, x, z);
-			else
+			for (int z = chunk_pos_z - (render_distance); z <= (chunk_pos_z + (render_distance)) + 1; z++)
+			{
+				if (x == (chunk_pos_x + (render_distance)) || z == (chunk_pos_z + (render_distance)))
+					send_chunk(user, x, z);
+				else if (x == (chunk_pos_x - (render_distance)) || z == (chunk_pos_z - (render_distance)))
+					send_chunk(user, x, z);
+			}
+		}
+	}
+	else
+	{
+		for (int x = chunk_pos_x - (render_distance); x < (chunk_pos_x + (render_distance)) + 1; x++)
+		{
+			for (int z = chunk_pos_z - (render_distance); z <= (chunk_pos_z + (render_distance)) + 1; z++)
+			{
 				send_chunk(user, x, z);
+			}
 		}
 	}
 }
@@ -544,7 +558,7 @@ int execute_pkt(packet p, int state, User &user, int index)
 						&typeid(float)
 					},
 					{
-						(long long)(htobe64((long long)(((0 & 0x3FFFFFF) << 38) | ((0 & 0x3FFFFFF) << 12) | (0 & 0xFFF)))),
+						(long long)(htobe64((long long)(((0 & (unsigned long)0x3FFFFFF) << 38) | ((0 & (unsigned long)0x3FFFFFF) << 12) | (0 & (unsigned long)0xFFF)))),
 						0.0f
 					},
 					user, 0x54
@@ -681,10 +695,12 @@ int execute_pkt(packet p, int state, User &user, int index)
 					break;
 				}
 				chunk_pos chunk_p = user.get_chunk_position();
-				if ((int)floor(pos.x) >> 4 != chunk_p.x || (int)floor(pos.z) >> 4 != chunk_p.y)
+				if (std::lround(pos.x) >> 4 != chunk_p.x || std::lround(pos.z) >> 4 != chunk_p.y)
 				{
-					send_visible_chunks(user);
-					//system_chat("You moved chunks!");
+					long x = std::lround(pos.x) >> 4, y = std::lround(pos.z) >> 4;
+					user.update_chunk_pos({.x = x, .y = y});
+					//system_chat(std::format("You moved from chunk {},{} to chunk {},{}",chunk_p.x, chunk_p.y , x, y));
+					send_visible_chunks(user, true, true);
 				}
 				update_pos_to_users(user, pos, on_ground);
 				user.update_position(pos);
@@ -725,10 +741,12 @@ int execute_pkt(packet p, int state, User &user, int index)
 					break;
 				}
 				chunk_pos chunk_p = user.get_chunk_position();
-				if ((int)floor(pos.x) >> 4 != chunk_p.x || (int)floor(pos.z) >> 4 != chunk_p.y)
+				if (std::lround(pos.x) >> 4 != chunk_p.x || std::lround(pos.z) >> 4 != chunk_p.y)
 				{
-					send_visible_chunks(user);
-					//system_chat("You moved chunks");
+					long x = std::lround(pos.x) >> 4, y = std::lround(pos.z) >> 4;
+					user.update_chunk_pos({.x = x, .y = y});
+					//system_chat(std::format("You moved from chunk {},{} to chunk {},{}",chunk_p.x, chunk_p.y , x, y));
+					send_visible_chunks(user, true, true);
 				}
 				update_pos_to_users(user, pos, on_ground);
 				user.update_position(pos);
@@ -798,11 +816,15 @@ int execute_pkt(packet p, int state, User &user, int index)
 					chun.chunks[y].blocks.block_indexes_nums = chunk;
 					auto c = chunks_r.find({.x = (orig_x >> 4), .z = (orig_z >> 4)});
 					c->second = chun;
-					pkt_send({&typeid(minecraft::varint)}, {pkt.get<minecraft::varint>("Sequence id")}, user, 0x05);
 					for (auto& value: users)
 					{
-						send_chunk(value.second, (orig_x >> 4), (orig_z >> 4));
+						next_tick_pkt.emplace_back(packet_def(
+							{&typeid(long long), &typeid(minecraft::varint)},
+							{(long long)(htobe64((long long)(((orig_x & (unsigned long)0x3FFFFFF) << 38) | ((orig_z & (unsigned long)0x3FFFFFF) << 12) | (orig_y & (unsigned long)0xFFF)))),
+							(minecraft::varint){.num = 0x0}}, value.second, 0x09));
 					}
+					log("Acknowledge id!: ", pkt.get<minecraft::varint>("Sequence id").num);
+					next_tick_pkt.emplace_back(packet_def({&typeid(minecraft::varint)}, {pkt.get<minecraft::varint>("Sequence id")}, user, 0x05));
 				}
 
 			}
@@ -900,11 +922,17 @@ int execute_pkt(packet p, int state, User &user, int index)
 				chun.chunks[y].blocks.block_indexes_nums = chunk;
 				auto c = chunks_r.find({.x = (orig_x >> 4), .z = (orig_z >> 4)});
 				c->second = chun;
-				pkt_send({&typeid(minecraft::varint)}, {pkt.get<minecraft::varint>("Sequence id")}, user, 0x05);
+				//next_tick_pkt.emplace_back(packet_def({&typeid(minecraft::varint)}, {pkt.get<minecraft::varint>("Sequence id")}, user, 0x05));
+				log("X ", orig_x);
 				for (auto& value: users)
 				{
-					send_chunk(value.second, (orig_x >> 4), (orig_z >> 4));
+					next_tick_pkt.emplace_back(packet_def(
+						{&typeid(long long), &typeid(minecraft::varint)},
+						{(long long)(htobe64((long long)(((orig_x & (unsigned long)0x3FFFFFF) << 38) | ((orig_z & (unsigned long)0x3FFFFFF) << 12) | (orig_y & (unsigned long)0xFFF)))),
+						(minecraft::varint){.num = 404}}, value.second, 0x09));
 				}
+				log("Acknowledge id?: ", pkt.get<minecraft::varint>("Sequence id").num);
+				next_tick_pkt.emplace_back(packet_def({&typeid(minecraft::varint)}, {pkt.get<minecraft::varint>("Sequence id")}, user, 0x05));
 				/*for (int xx = -17; xx < 17; xx++)
 				{
 					for (int zz = -17; zz <= 17; zz++)

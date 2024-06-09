@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <print>
 #include <bitset>
 #include <map>
 
@@ -57,13 +58,32 @@ std::size_t WriteUleb128(std::string &dest, unsigned long val)
 	val >>= 7;
 
 	if (val != 0)
-	  byte |= 0x80;  // mark this byte to show that more bytes will follow
+	  byte |= 0x80;
 
 	dest.push_back(byte);
 	count++;
   } while (val != 0);
-
   return count;
+}
+
+std::string encodeSignedLEB128(int32_t value) {
+    std::string encoded;
+    bool more = true;
+    while (more) {
+        uint8_t byte = value & 0x7F; // Extract the lower 7 bits
+        value >>= 7; // Shift right by 7 to process the next bits
+
+        // Check if more bytes are needed to encode the number correctly
+        // The value != 0 checks whether all remaining bits are 0
+        // The value != -1 checks whether all remaining bits are 1 (for negative numbers)
+        if ((value == 0 && (byte & 0x40) == 0) || (value == -1 && (byte & 0x40) != 0)) {
+            more = false;
+        } else {
+            byte |= 0x80; // Set the continuation bit if more bytes are needed
+        }
+        encoded += static_cast<char>(byte);
+    }
+    return encoded;
 }
 
 void write_string(std::string &str, std::string src)

@@ -41,7 +41,7 @@ std::bitset<64> concat(std::vector<std::bitset<4>> &vec, int index, int change_i
     return std::bitset<64>(buf);
 }
 
-minecraft::paletted_container_rw world_gen_inderect(bool surface = false)
+constexpr minecraft::paletted_container_rw world_gen_inderect(bool surface = false)
 {
     minecraft::paletted_container_rw ret = {.bits_per_entry = 4, .palette_data_entries = (minecraft::varint){.num = 4}, 
     .block_ids = {(minecraft::varint){.num = 0}, (minecraft::varint){.num = 9}, (minecraft::varint){.num = 10}, (minecraft::varint){.num = 404}}, 
@@ -78,7 +78,7 @@ minecraft::paletted_container_rw world_gen_inderect(bool surface = false)
     return ret;
 }
 
-minecraft::paletted_container_rw world_gen_inderect_empty()
+constexpr minecraft::paletted_container_rw world_gen_inderect_empty()
 {
     minecraft::paletted_container_rw ret = {.bits_per_entry = 4, .palette_data_entries = (minecraft::varint){.num = 4}, 
     .block_ids = {(minecraft::varint){.num = 0}, (minecraft::varint){.num = 9}, (minecraft::varint){.num = 10}, (minecraft::varint){.num = 404}}, 
@@ -132,14 +132,14 @@ minecraft::paletted_container_rw world_gen_inderect_empty()
     return ret;
 }*/
 
-minecraft::paletted_container_rw biome_gen()
+constexpr minecraft::paletted_container_rw biome_gen()
 {
     minecraft::paletted_container_rw ret = {.bits_per_entry = 0, 
     .block_ids = {(minecraft::varint){.num = 0}}, .data_lenght = (minecraft::varint){.num = 0}, .block_indexes = {}};
     return ret;
 }
 
-minecraft::chunk_rw chunk_gen_r()
+constexpr minecraft::chunk_rw chunk_gen_r()
 {
 	int in = 0;
 	minecraft::chunk_rw chunks;
@@ -162,7 +162,7 @@ minecraft::chunk_rw chunk_gen_r()
 	return chunks;
 }
 
-minecraft::chunk_rw chunk_gen_empty()
+constexpr minecraft::chunk_rw chunk_gen_empty()
 {
 	int in = 0;
 	minecraft::chunk_rw chunks;

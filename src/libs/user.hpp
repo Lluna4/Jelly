@@ -38,7 +38,7 @@ struct position
 };
 struct chunk_pos
 {
-    int x, y;
+    long x, y;
 };
 
 class User
@@ -97,7 +97,11 @@ class User
         void update_position(position p)
         {
             pos = p;
-            chunk_p = {.x = (int)floor(p.x) >> 4, .y = (int)floor(p.z) >> 4};
+        }
+
+        void update_chunk_pos(chunk_pos ppos)
+        {
+            chunk_p = ppos;
         }
 
         struct chunk_pos get_chunk_position()
