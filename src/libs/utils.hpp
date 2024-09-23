@@ -17,6 +17,7 @@ struct packet
 	unsigned long size;
 	std::size_t buf_size;
 	char *data;
+	int sock;
 };
 
 struct pkt
@@ -98,10 +99,11 @@ unsigned long read_string(char *str, std::string &dest)
 {
 	unsigned long ret = 0;
 
-	ReadUleb128(str, &ret);
+	size_t size = ReadUleb128(str, &ret);
 	str++;
 	dest = str;
 	dest = dest.substr(0, ret);
+	ret += size;
 	return ret;
 }
 
@@ -194,6 +196,7 @@ namespace minecraft
 
 	struct varint
 	{
+		unsigned long size;
 		unsigned long num;
 	};
 

@@ -15,7 +15,7 @@
 
 
 
-std::vector<packet> process_packet(char *pkt)
+std::vector<packet> process_packet(char *pkt, int sock)
 {
 	int lenght = 0;
 	char *next = NULL;
@@ -31,6 +31,7 @@ std::vector<packet> process_packet(char *pkt)
 		next = pkt + (p.size + 1);
 		pkt++;
         p.id = *pkt;
+		p.sock = sock;
 		data = (char *)calloc(p.size, sizeof(char));
 		pkt++;
 		std::memcpy(data, pkt, p.size - 1);
