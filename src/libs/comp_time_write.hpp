@@ -102,6 +102,23 @@ struct write_var<minecraft::string>
     }
 };
 
+template<>
+struct write_var<minecraft::uuid>
+{
+    static void call(char_size *v, minecraft::uuid value)
+    {
+        while (v->consumed_size >= v->max_size || v->consumed_size + value.len >= v->max_size)
+        {
+            v->start_data = (char *)realloc(v->start_data, v->max_size + 1024);
+            v->max_size += 1024;
+            v->data = v->start_data + v->consumed_size;
+        }
+        memcpy(v->data, value.buff, 16);
+        v->data += 16;
+        v->consumed_size += 16;
+    }
+};
+
 
 template <typename Integer, Integer ...I, typename F> constexpr void const_for_each(std::integer_sequence<Integer, I...>, F&& func)
 {

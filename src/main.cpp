@@ -21,6 +21,7 @@ enum states
     HANDSHAKE,
     STATUS,
     LOGIN,
+    CONFIGURATION,
     PLAY
 };
 
@@ -169,6 +170,28 @@ void execute_packet(packet pkt, User &user)
             
             std::tuple<minecraft::varint, long> ping_repl = {(minecraft::varint){.size = 1, .num = 1}, std::get<0>(ping)};
             send_packet(ping_repl, user.sockfd);
+        }
+    }
+    if (user.state == LOGIN)
+    {
+        if (pkt.id == 0x0)
+        {
+            std::tuple<minecraft::string> login_start;
+            login_start = read_packet(login_start, pkt.data);
+            user.name = std::get<0>(login_start).string;
+            user.uuid.generate(user.name);
+
+            std::tuple<minecraft::varint, minecraft::uuid, minecraft::string, minecraft::varint, char, unsigned char> login_succ =
+                {
+                    (minecraft::varint){.size = 1, .num = 0x02},user.uuid, (minecraft::string){.len = user.name.length(), .string = user.name}, 
+                    (minecraft::varint){.size = 1, .num = 0x00}, 0,(unsigned char)true
+                };
+            send_packet(login_succ, user.sockfd);
+        }
+        if (pkt.id == 0x3)
+        {
+            log("login awknowledged");
+            user.state = CONFIGURATION;
         }
     }
 }
