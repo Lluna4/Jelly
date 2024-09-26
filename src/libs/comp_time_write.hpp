@@ -95,10 +95,10 @@ struct write_var<minecraft::string>
             v->data = v->start_data + v->consumed_size;
         }
         std::string a;
-        write_string(a, value.string);
-        memcpy(v->data, a.c_str(), value.len);
-        v->data += value.len;
-        v->consumed_size += value.len;
+        size_t size = write_string(a, value.str);
+        memcpy(v->data, a.c_str(), value.len + size);
+        v->data += value.len + size;
+        v->consumed_size += value.len + size;
     }
 };
 

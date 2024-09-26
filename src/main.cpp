@@ -47,6 +47,7 @@ class User
             name = "placeholder name";
             uuid.generate(name);
             locale = "en_US";
+            render_distance = 8;
             pos = {0.0f, 0.0f, 0.0f};
             angle = {0.0f, 0.0f};
             on_ground = true;
@@ -54,6 +55,7 @@ class User
         }
         
         int state;
+        int render_distance;
         minecraft::uuid uuid;
         std::string name;
         std::string pronouns;
@@ -97,7 +99,7 @@ void status_response(User user)
 			{"online", 1}
 		}},
 		{"description", {
-			{"text", "AISNAKSNAS"}
+			{"text", "Hiiiii!"}
 		}},
 		{"favicon", base64}
 	};
@@ -105,39 +107,23 @@ void status_response(User user)
 	std::cout << response_str << std::endl;
     std::string dummy;
     size_t size = WriteUleb128(dummy, response_str.length());
-    minecraft::string str = (minecraft::string){.len = response_str.length() + size, .string = response_str};
-    std::tuple<minecraft::varint, minecraft::string> status_pkt = {(minecraft::varint){.size = 1,.num = 0}, str};
+    minecraft::string str(response_str);
+    std::tuple<minecraft::varint, minecraft::string> status_pkt = {minecraft::varint(0), str};
     send_packet(status_pkt, user.sockfd);
 }
 
-void recv_thread()
+void registry_data(User user)
 {
-    int events_ready = 0;
-    epoll_event events[1024];
-    char *main_buffer = (char *)calloc(1024, sizeof(char));
-
-    while (true)
-    {
-        events_ready = epoll_wait(epfd, events, 1024, 20);
-        if (events_ready == -1)
-            log("Error! ", strerror(errno));
-        //log("Events ready ", events_ready);
-        for (int i = 0; i < events_ready;i++)
-        {
-            int current_fd = events[i].data.fd;
-            int status = recv(current_fd, main_buffer, 1024, 0);
-            if (status == -1 || status == 0)
-            {
-                netlib::disconnect_server(current_fd, epfd);
-            }
-            std::vector<packet> packets = process_packet(main_buffer, current_fd);
-            log("read ", packets.size(), " packets");
-            for (auto pack: packets)
-                tick_packets.push_back(pack);
-            memset(main_buffer, 0, 1024);
-        }
-
-    }
+	std::ifstream file("registry_info.packet", std::ios::binary);
+	std::string pkt;
+	std::stringstream buffer;
+	buffer << file.rdbuf();
+	file.seekg(0, std::ios::end);
+	std::size_t size = file.tellg();
+	WriteUleb128(pkt, size + 1);
+	pkt.push_back(0x07);
+	pkt.append(buffer.str());
+    log(send(user.sockfd, pkt.c_str(), pkt.length(), 0));
 }
 
 void execute_packet(packet pkt, User &user)
@@ -150,7 +136,7 @@ void execute_packet(packet pkt, User &user)
                 std::tuple<minecraft::varint, minecraft::string, unsigned short, minecraft::varint> handshake;
                 handshake = read_packet(handshake, pkt.data);
                 log(std::format("Got a handshake packet, version: {}, address {}, port {}, state {}", 
-                std::get<0>(handshake).num, std::get<1>(handshake).string, std::get<2>(handshake), std::get<3>(handshake).num));
+                std::get<0>(handshake).num, std::get<1>(handshake).str, std::get<2>(handshake), std::get<3>(handshake).num));
                 user.state = std::get<3>(handshake).num;
                 break;
         }
@@ -168,7 +154,7 @@ void execute_packet(packet pkt, User &user)
             std::tuple<long> ping;
             ping = read_packet(ping, pkt.data);
             
-            std::tuple<minecraft::varint, long> ping_repl = {(minecraft::varint){.size = 1, .num = 1}, std::get<0>(ping)};
+            std::tuple<minecraft::varint, long> ping_repl = {minecraft::varint(1), std::get<0>(ping)};
             send_packet(ping_repl, user.sockfd);
         }
     }
@@ -178,13 +164,13 @@ void execute_packet(packet pkt, User &user)
         {
             std::tuple<minecraft::string> login_start;
             login_start = read_packet(login_start, pkt.data);
-            user.name = std::get<0>(login_start).string;
+            user.name = std::get<0>(login_start).str;
             user.uuid.generate(user.name);
 
-            std::tuple<minecraft::varint, minecraft::uuid, minecraft::string, minecraft::varint, char, unsigned char> login_succ =
+            std::tuple<minecraft::varint, minecraft::uuid, minecraft::string, minecraft::varint, unsigned char> login_succ =
                 {
-                    (minecraft::varint){.size = 1, .num = 0x02},user.uuid, (minecraft::string){.len = user.name.length(), .string = user.name}, 
-                    (minecraft::varint){.size = 1, .num = 0x00}, 0,(unsigned char)true
+                    minecraft::varint(0x02), user.uuid, minecraft::string(user.name), 
+                    minecraft::varint(0x00),(unsigned char)true
                 };
             send_packet(login_succ, user.sockfd);
         }
@@ -194,10 +180,70 @@ void execute_packet(packet pkt, User &user)
             user.state = CONFIGURATION;
         }
     }
+    if (user.state == CONFIGURATION)
+    {
+        if (pkt.id == 0x0)
+        {
+            std::tuple<minecraft::string, char, minecraft::varint, 
+                       bool, unsigned char, minecraft::varint, bool, bool> client_information;
+            client_information = read_packet(client_information, pkt.data);
+            log(std::format("Locale {}, render distance {}, chat mode {}", std::get<0>(client_information).str, 
+            (int)std::get<1>(client_information), std::get<2>(client_information).num));
+            user.locale = std::get<0>(client_information).str;
+            user.render_distance = (int)std::get<1>(client_information);
+
+            std::tuple<minecraft::varint, minecraft::varint, minecraft::string, minecraft::string, minecraft::string> known_packs = {
+                minecraft::varint(0x0E), minecraft::varint(1),
+                minecraft::string("minecraft"), minecraft::string("core"), minecraft::string("1.21")
+            };
+            send_packet(known_packs, user.sockfd);
+            registry_data(user);
+        }
+    }
+}
+
+void recv_thread()
+{
+    int events_ready = 0;
+    epoll_event events[1024];
+    char *main_buffer = (char *)calloc(1024, sizeof(char));
+
+    while (true)
+    {
+        events_ready = epoll_wait(epfd, events, 1024, -1);
+        if (events_ready == -1)
+            log("Error! ", strerror(errno));
+        //log("Events ready ", events_ready);
+        for (int i = 0; i < events_ready;i++)
+        {
+            int current_fd = events[i].data.fd;
+            int status = recv(current_fd, main_buffer, 1024, 0);
+            if (status == -1 || status == 0)
+            {
+                netlib::disconnect_server(current_fd, epfd);
+                users.erase(current_fd);
+            }
+            std::vector<packet> packets = process_packet(main_buffer, current_fd);
+            log("read ", packets.size(), " packets");
+            for (auto pack: packets)
+            {
+                if (pack.id == 0x1 && pack.size == 9)
+                {
+                    execute_packet(pack, users.find(current_fd)->second);
+                    continue;
+                }
+                tick_packets.push_back(pack);
+            }
+            memset(main_buffer, 0, 1024);
+        }
+
+    }
 }
 
 int main()
 {
+    using clock = std::chrono::system_clock;
+    using ms = std::chrono::duration<double, std::milli>;
     int sock = netlib::init_server("0.0.0.0", 25565);
     if (sock == -1)
     {
@@ -213,6 +259,7 @@ int main()
 
     while (true)
     {   
+        const auto before = clock::now();
         for (auto pack: tick_packets)
         {
             log(std::format("Got a packet with id {} and size {}", pack.id, pack.size));
@@ -223,6 +270,8 @@ int main()
             
         }
         tick_packets.clear();
-        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        const ms duration = clock::now() - before;
+        //log("MSPT ", duration.count(), "ms");
+        std::this_thread::sleep_for(std::chrono::milliseconds(50) - duration);
     }
 }

@@ -70,7 +70,7 @@ struct read_var<minecraft::string>
     static minecraft::string call(char **v)
     {
         minecraft::string ret; 
-        ret.len = read_string(*v, ret.string);
+        ret.len = read_string(*v, ret.str);
         *v += ret.len;
         return ret;
     }

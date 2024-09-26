@@ -87,10 +87,11 @@ std::string encodeSignedLEB128(int32_t value) {
     return encoded;
 }
 
-void write_string(std::string &str, std::string src)
+size_t write_string(std::string &str, std::string src)
 {
-	WriteUleb128(str, src.length());
+	size_t size = WriteUleb128(str, src.length());
 	str.append(src);
+	return size;
 }
 
 
@@ -190,12 +191,29 @@ namespace minecraft
 {
 	struct string
 	{
+		string()
+		{}
+
+        string(std::string str_)
+        :str(str_)
+		{
+			len = str_.length();
+		}
 		unsigned long len;
-		std::string string;
+		std::string str;
 	};
 
 	struct varint
 	{
+		varint()
+		{}
+
+        varint(unsigned long num_)
+        :num(num_)
+		{
+			std::string dummy;
+			size = WriteUleb128(dummy, num_);
+		}
 		unsigned long size;
 		unsigned long num;
 	};
@@ -227,7 +245,7 @@ namespace minecraft
 		unsigned long ret = 0;
 
 		ReadUleb128(buf, &ret);
-		return (varint){.num = ret};
+		return varint(ret);
 	}
 
 	struct node_root
@@ -266,7 +284,7 @@ void send_varint(int fd, unsigned long val)
 void send_string(int fd, minecraft::string str)
 {
 	send_varint(fd, str.len);
-	send(fd, str.string.c_str(), str.string.length(), 0);
+	send(fd, str.str.c_str(), str.str.length(), 0);
 }
 
 static std::vector<std::bitset<6>> proc_6bit(std::string hi)
