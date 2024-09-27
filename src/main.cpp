@@ -8,6 +8,7 @@
 #include <chrono>
 #include <errno.h>
 #include <nlohmann/json.hpp>
+#include <sys/sendfile.h>
 #include "libs/comp_time_write.hpp"
 #include "libs/comp_time_read.hpp"
 
@@ -114,16 +115,59 @@ void status_response(User user)
 
 void registry_data(User user)
 {
-	std::ifstream file("registry_info.packet", std::ios::binary);
-	std::string pkt;
-	std::stringstream buffer;
-	buffer << file.rdbuf();
-	file.seekg(0, std::ios::end);
-	std::size_t size = file.tellg();
-	WriteUleb128(pkt, size + 1);
-	pkt.push_back(0x07);
-	pkt.append(buffer.str());
-    log(send(user.sockfd, pkt.c_str(), pkt.length(), 0));
+    int fd = open("../Minecraft-DataRegistry-Packet-Generator/registries/1.21-registry/created-packets/banner_pattern.data", O_RDONLY);
+    off_t file_size = lseek(fd, 0, SEEK_END);
+    lseek(fd, 0, SEEK_SET);
+    sendfile(user.sockfd, fd, 0, file_size);
+    close(fd);
+    
+    fd = open("../Minecraft-DataRegistry-Packet-Generator/registries/1.21-registry/created-packets/chat_type.data", O_RDONLY);
+    file_size = lseek(fd, 0, SEEK_END);
+    lseek(fd, 0, SEEK_SET);
+    sendfile(user.sockfd, fd, 0, file_size);
+    close(fd);
+    
+    fd = open("../Minecraft-DataRegistry-Packet-Generator/registries/1.21-registry/created-packets/damage_type.data", O_RDONLY);
+    file_size = lseek(fd, 0, SEEK_END);
+    lseek(fd, 0, SEEK_SET);
+    sendfile(user.sockfd, fd, 0, file_size);
+    close(fd);
+    
+    fd = open("../Minecraft-DataRegistry-Packet-Generator/registries/1.21-registry/created-packets/dimension_type.data", O_RDONLY);
+    file_size = lseek(fd, 0, SEEK_END);
+    lseek(fd, 0, SEEK_SET);
+    sendfile(user.sockfd, fd, 0, file_size);
+    close(fd);
+
+    fd = open("../Minecraft-DataRegistry-Packet-Generator/registries/1.21-registry/created-packets/painting_variant.data", O_RDONLY);
+    file_size = lseek(fd, 0, SEEK_END);
+    lseek(fd, 0, SEEK_SET);
+    sendfile(user.sockfd, fd, 0, file_size);
+    close(fd);
+
+    fd = open("../Minecraft-DataRegistry-Packet-Generator/registries/1.21-registry/created-packets/trim_material.data", O_RDONLY);
+    file_size = lseek(fd, 0, SEEK_END);
+    lseek(fd, 0, SEEK_SET);
+    sendfile(user.sockfd, fd, 0, file_size);
+    close(fd);
+
+    fd = open("../Minecraft-DataRegistry-Packet-Generator/registries/1.21-registry/created-packets/trim_pattern.data", O_RDONLY);
+    file_size = lseek(fd, 0, SEEK_END);
+    lseek(fd, 0, SEEK_SET);
+    sendfile(user.sockfd, fd, 0, file_size);
+    close(fd);
+
+    fd = open("../Minecraft-DataRegistry-Packet-Generator/registries/1.21-registry/created-packets/wolf_variant.data", O_RDONLY);
+    file_size = lseek(fd, 0, SEEK_END);
+    lseek(fd, 0, SEEK_SET);
+    sendfile(user.sockfd, fd, 0, file_size);
+    close(fd);
+
+    fd = open("../Minecraft-DataRegistry-Packet-Generator/registries/1.21-registry/created-packets/worldgen/biome.data", O_RDONLY);
+    file_size = lseek(fd, 0, SEEK_END);
+    lseek(fd, 0, SEEK_SET);
+    sendfile(user.sockfd, fd, 0, file_size);
+    close(fd);
 }
 
 void execute_packet(packet pkt, User &user)
@@ -198,6 +242,12 @@ void execute_packet(packet pkt, User &user)
             };
             send_packet(known_packs, user.sockfd);
             registry_data(user);
+            std::tuple<minecraft::varint> end_config = {minecraft::varint(0x03)};
+            send_packet(end_config, user.sockfd);
+        }
+        if (pkt.id = 0x03)
+        {
+            user.state = PLAY;
         }
     }
 }
