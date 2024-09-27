@@ -7,4 +7,4 @@ This project aims to be a simple minecraft server for me to learn but also to be
 ## Dependencies
 I'm really glad that some amazing people created an awesome c++ library for json, without them this project would be impossible \
 And also thank you nlohmann for making [nlohmann/json](https://github.com/nlohmann/json) <3 \
-Thank you @Mansitoh for the packets at [packets](https://github.com/Mansitoh/Minecraft-DataRegistry-Packet-Generator)
+Thank you @mansitoh for the packets at [packets](https://github.com/Mansitoh/Minecraft-DataRegistry-Packet-Generator)
