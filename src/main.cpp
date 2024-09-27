@@ -14,6 +14,11 @@
 
 int epfd;
 std::vector<packet> tick_packets;
+using login_play = std::tuple<
+                minecraft::varint, int, bool, minecraft::varint, minecraft::string, minecraft::varint,
+                minecraft::varint, minecraft::varint, bool, bool, bool,
+                minecraft::varint, minecraft::string, long,
+                unsigned char, char, bool, bool, bool, minecraft::varint, bool>;
 
 using json = nlohmann::json;
 
@@ -222,6 +227,7 @@ void execute_packet(packet pkt, User &user)
         {
             log("login awknowledged");
             user.state = CONFIGURATION;
+            return;
         }
     }
     if (user.state == CONFIGURATION)
@@ -245,9 +251,19 @@ void execute_packet(packet pkt, User &user)
             std::tuple<minecraft::varint> end_config = {minecraft::varint(0x03)};
             send_packet(end_config, user.sockfd);
         }
-        if (pkt.id = 0x03)
+        if (pkt.id == 0x03)
         {
             user.state = PLAY;
+            login_play login = 
+            {
+                minecraft::varint(0x2B), user.sockfd, false, minecraft::varint(1), 
+                minecraft::string("minecraft:overworld"), minecraft::varint(20),
+                minecraft::varint(user.render_distance), minecraft::varint(8),
+                false, true, false, minecraft::varint(0),
+                minecraft::string("minecraft:overworld"), 123456, 0, -1, false,
+                false, false, minecraft::varint(0), false
+            };
+            send_packet(login, user.sockfd);
         }
     }
 }
