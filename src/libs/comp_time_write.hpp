@@ -4,6 +4,7 @@
 #include <cstring>
 #include <tuple>
 #include "utils.hpp"
+#include "world_gen.hpp"
 
 #define write_comp_pkt(size, ptr, t) const_for<size>([&](auto i){write_var<std::tuple_element_t<i.value, decltype(t)>>::call(&ptr, std::get<i.value>(t));});
 
@@ -18,18 +19,28 @@ struct char_size
 template <typename T>
 void write_type(char *v, T value)
 {
-    std::memcpy(v, &value, sizeof(T));
     switch (sizeof(T))
     {
         case 2:
-            value = htobe16((*(T *)&value));
+        {
+            uint16_t conv = htobe16((*(uint16_t *)&value));
+            std::memcpy(v, &conv, sizeof(T));
             break;
+        }
         case 4:
-            value = htobe32((*(T *)&value));
+        {
+            uint32_t conv = htobe32((*(uint32_t *)&value));
+            std::memcpy(v, &conv, sizeof(T));
             break;
+        }
         case 8:
-            value = htobe64((*(T *)&value));
+        {
+            uint64_t conv = htobe64((*(uint64_t *)&value));
+            std::memcpy(v, &conv, sizeof(T));
             break;
+        }
+        default:
+            std::memcpy(v, &value, sizeof(T));
     }
 }
 
@@ -116,6 +127,76 @@ struct write_var<minecraft::uuid>
         memcpy(v->data, value.buff, 16);
         v->data += 16;
         v->consumed_size += 16;
+    }
+};
+
+template<>
+struct write_var<minecraft::chunk_rw>
+{
+    static void call(char_size *v, minecraft::chunk_rw value)
+    {
+        while (v->consumed_size >= v->max_size || v->consumed_size + value.size() >= v->max_size)
+        {
+            v->start_data = (char *)realloc(v->start_data, v->max_size + 1024);
+            v->max_size += 1024;
+            v->data = v->start_data + v->consumed_size;
+        }
+        
+        auto chun = value;
+        for (int x = 0; x < chun.chunks.size(); x++)
+        {
+            chun.chunks[x].block_count = htobe16(*(uint16_t*)&chun.chunks[x].block_count);
+            std::memcpy(v->data, &chun.chunks[x].block_count, sizeof(short));
+            v->data += sizeof(short);
+            minecraft::paletted_container_rw cont = chun.chunks[x].blocks;
+
+            std::memcpy(v->data, &cont.bits_per_entry, sizeof(unsigned char));
+            v->data += sizeof(unsigned char);
+            std::string dest;
+            size_t size = WriteUleb128(dest, cont.palette_data_entries.num);
+            std::memcpy(v->data, dest.c_str(), size);
+            v->data += size;
+            for (int i = 0; i < cont.block_ids.size(); i++)
+            {
+                dest.clear();
+                size = WriteUleb128(dest, cont.block_ids[i].num);
+                std::memcpy(v->data, dest.c_str(), size);
+                v->data += size;
+            }   
+            dest.clear();
+            size = WriteUleb128(dest, cont.data_lenght.num);
+            std::memcpy(v->data, dest.c_str(), size);
+            v->data += size;
+
+            for (int i = 0; i < cont.block_indexes.size(); i++)
+            {
+                unsigned long conv = htobe64((*(uint64_t *)&cont.block_indexes[i]));
+                std::memcpy(v->data, &conv, sizeof(unsigned long));
+                v->data += sizeof(unsigned long);
+            }
+            
+            minecraft::paletted_container_rw cont2 = chun.chunks[x].biome;
+
+            std::memcpy(v->data, &cont2.bits_per_entry, sizeof(unsigned char));
+            v->data += sizeof(unsigned char);
+            //send_varint(fd, cont2.palette_data_entries.num);
+            dest.clear();
+            size = WriteUleb128(dest, cont2.block_ids[0].num);
+            std::memcpy(v->data, dest.c_str(), size);
+            v->data += size;
+
+            dest.clear();
+            size = WriteUleb128(dest, cont2.data_lenght.num);
+            std::memcpy(v->data, dest.c_str(), size);
+            v->data += size;
+
+            for (int i = 0; i < cont2.block_indexes.size(); i++)
+            {
+                std::memcpy(v->data, &cont2.block_indexes[i], sizeof(long));
+                v->data += sizeof(long);
+            }
+        }
+        v->consumed_size += value.size();
     }
 };
 

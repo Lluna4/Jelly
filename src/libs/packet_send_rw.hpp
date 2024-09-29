@@ -4,7 +4,6 @@
 #include <vector>
 #include <iostream>
 #include <any>
-#include "user.hpp"
 #include "utils.hpp"
 #include <sys/socket.h>
 #include <arpa/inet.h>
@@ -78,11 +77,11 @@ int calc_len(std::vector<const std::type_info*> types, std::vector<std::any> val
 	return size;
 }
 
-void pkt_send(std::vector<const std::type_info*> types, std::vector<std::any> values, User user, int id)
+void pkt_send(std::vector<const std::type_info*> types, std::vector<std::any> values, int sock, int id)
 {
 	std::string a;
 	std::string buf;
-	int fd = user.get_socket();
+	int fd = sock;
 	int size = calc_len(types, values) + 1;
 	std::cout << size << std::endl;
 	send_varint(fd, size);
@@ -153,12 +152,12 @@ void pkt_send(std::vector<const std::type_info*> types, std::vector<std::any> va
 		{
 			struct minecraft::string str = std::any_cast<minecraft::string>(values[i]);
 			send_varint(fd, str.len);
-			send(fd, str.string.c_str(), str.string.length(), 0);
+			send(fd, str.str.c_str(), str.str.length(), 0);
 		}
 		else if (types[i]->hash_code() == typeid(minecraft::uuid).hash_code())
 		{
 			struct minecraft::uuid str = std::any_cast<minecraft::uuid>(values[i]);
-			send(fd, str.data.c_str(), str.data.length(), 0);
+			send(fd, str.buff, str.len, 0);
 		}
 		else if (types[i]->hash_code() == typeid(minecraft::varint).hash_code())
 		{

@@ -11,6 +11,7 @@
 #include <sys/sendfile.h>
 #include "libs/comp_time_write.hpp"
 #include "libs/comp_time_read.hpp"
+#include "libs/world_gen.hpp"
 
 int epfd;
 std::vector<packet> tick_packets;
@@ -19,6 +20,10 @@ using login_play = std::tuple<
                 minecraft::varint, minecraft::varint, bool, bool, bool,
                 minecraft::varint, minecraft::string, long,
                 unsigned char, char, bool, bool, bool, minecraft::varint, bool>;
+
+using chunk_data_light = std::tuple<minecraft::varint, int, int, char, char, minecraft::varint, minecraft::chunk_rw,
+                                    minecraft::varint, char, char, char, char, minecraft::varint,
+                                    minecraft::varint>;
 
 using json = nlohmann::json;
 
@@ -54,7 +59,7 @@ class User
             uuid.generate(name);
             locale = "en_US";
             render_distance = 8;
-            pos = {0.0f, 0.0f, 0.0f};
+            pos = {0.0f, 64.0f, 0.0f};
             angle = {0.0f, 0.0f};
             on_ground = true;
             sneaking = false;
@@ -260,10 +265,29 @@ void execute_packet(packet pkt, User &user)
                 minecraft::string("minecraft:overworld"), minecraft::varint(20),
                 minecraft::varint(user.render_distance), minecraft::varint(8),
                 false, true, false, minecraft::varint(0),
-                minecraft::string("minecraft:overworld"), 123456, 0, -1, false,
+                minecraft::string("minecraft:overworld"), 123456, 1, -1, false,
                 false, false, minecraft::varint(0), false
             };
             send_packet(login, user.sockfd);
+
+            std::tuple<minecraft::varint, double, double, double, float, float, char, minecraft::varint> sync_pos =
+            {
+                minecraft::varint(0x40), user.pos.x, user.pos.y, user.pos.z, user.angle.yaw, user.angle.pitch, 0, minecraft::varint(0x0)
+            };
+            send_packet(sync_pos, user.sockfd);
+
+            std::tuple<minecraft::varint, unsigned char, float> game_event = 
+            {
+                minecraft::varint(0x22), 13, 0.0f
+            };
+            send_packet(game_event, user.sockfd);
+            
+            minecraft::chunk_rw chunk = find_chunk({.x = 0, .z = 0});
+            chunk_data_light chunk_data = {
+                    minecraft::varint(0x27), 0, 0, 0x0a, 0x0, minecraft::varint(chunk.size()), chunk, 
+                    minecraft::varint(0),0, 0, 0, 0, minecraft::varint(0), minecraft::varint(0)
+                };
+            send_packet(chunk_data, user.sockfd);
         }
     }
 }
@@ -322,7 +346,7 @@ int main()
     accept_t.detach();
     std::thread read_t(recv_thread);
     read_t.detach();
-
+    int ticks_until_keep_alive = 12;
     while (true)
     {   
         const auto before = clock::now();
@@ -336,6 +360,18 @@ int main()
             
         }
         tick_packets.clear();
+        if (ticks_until_keep_alive == 0)
+        {
+            std::tuple<minecraft::varint, long> keep_alive = {minecraft::varint(0x26), 12324};
+            for (auto user: users)
+            {
+                if (user.second.state == PLAY)
+                    send_packet(keep_alive, user.second.sockfd);
+            }
+            ticks_until_keep_alive = 12;
+        }
+        else
+            ticks_until_keep_alive--;
         const ms duration = clock::now() - before;
         //log("MSPT ", duration.count(), "ms");
         std::this_thread::sleep_for(std::chrono::milliseconds(50) - duration);
