@@ -59,7 +59,7 @@ class User
             uuid.generate(name);
             locale = "en_US";
             render_distance = 8;
-            pos = {0.0f, 64.0f, 0.0f};
+            pos = {2.0f, 64.0f, 2.0f};
             angle = {0.0f, 0.0f};
             on_ground = true;
             sneaking = false;
@@ -107,7 +107,7 @@ void status_response(User user)
 		}},
 		{"players", {
 			{"max", 20},
-			{"online", 1}
+			{"online", users.size()}
 		}},
 		{"description", {
 			{"text", "Hiiiii!"}
@@ -178,6 +178,22 @@ void registry_data(User user)
     lseek(fd, 0, SEEK_SET);
     sendfile(user.sockfd, fd, 0, file_size);
     close(fd);
+}
+
+void send_chat(std::string message, std::string name)
+{
+    std::tuple<minecraft::varint, minecraft::string_tag, minecraft::varint, minecraft::string_tag, bool> chat_message =
+    {
+        minecraft::varint(0x1E), (minecraft::string_tag){.len = (short)message.length(), .string = message},
+        minecraft::varint(1), (minecraft::string_tag){.len = (short)name.length(), .string = name}, false,
+    };
+    for (auto user: users)
+    {
+        if (user.second.state == PLAY)
+        {
+            send_packet(chat_message, user.second.sockfd);
+        }
+    }
 }
 
 void execute_packet(packet pkt, User &user)
@@ -276,6 +292,57 @@ void execute_packet(packet pkt, User &user)
             };
             send_packet(sync_pos, user.sockfd);
 
+            std::string user_name = std::format("{} ({})", user.name, user.pronouns);
+            std::tuple<minecraft::varint, char, minecraft::varint, minecraft::uuid,
+                    minecraft::string, minecraft::varint, bool ,bool, minecraft::string_tag> info_update_head_user =
+                    {
+                        minecraft::varint(0x3E), 0x01 |0x08 | 0x20, minecraft::varint(1), user.uuid, 
+                        minecraft::string(user.name), minecraft::varint(0), true, true,
+                        minecraft::string_tag{.len = (short)user_name.length(), .string = user_name}
+                    };
+            std::tuple<minecraft::varint, minecraft::varint, minecraft::uuid, minecraft::varint, double,
+            double, double, char, char, char, minecraft::varint,
+            short, short, short> 
+            spawn_entity_user =
+            {
+                minecraft::varint(0x01), minecraft::varint(user.sockfd), user.uuid, minecraft::varint(122 + 6),
+                user.pos.x, user.pos.y, user.pos.z, 
+                (user.angle.pitch/ 360) * 256, (user.angle.yaw/ 360) * 256,
+                (user.angle.yaw/ 360) * 256, minecraft::varint(0),0,0,0
+            };
+            for (auto us: users)
+            {
+                if (us.second.state == PLAY)
+                {
+                    std::string name = std::format("{} [{}]", us.second.name, us.second.pronouns);
+                    std::tuple<minecraft::varint, char, minecraft::varint, minecraft::uuid,
+                            minecraft::string, minecraft::varint, bool ,bool, minecraft::string_tag> info_update_head =
+                            {
+                                minecraft::varint(0x3E), 0x01 |0x08 | 0x20, minecraft::varint(1), us.second.uuid, 
+                                minecraft::string(us.second.name), minecraft::varint(0), true, true,
+                                minecraft::string_tag{.len = (short)name.length(), .string = name}
+                            };
+                    send_packet(info_update_head, user.sockfd);
+                    if (user.sockfd != us.second.sockfd)
+                    {
+                        send_packet(info_update_head_user, us.second.sockfd);
+                        
+                        std::tuple<minecraft::varint, minecraft::varint, minecraft::uuid, minecraft::varint, double,
+                                    double, double, char, char, char, minecraft::varint,
+                                    short, short, short> 
+                        spawn_entity =
+                        {
+                            minecraft::varint(0x01), minecraft::varint(us.second.sockfd), us.second.uuid, minecraft::varint(122 + 6),
+                            us.second.pos.x, us.second.pos.y, us.second.pos.z, 
+                           (us.second.angle.pitch/ 360) * 256, (us.second.angle.yaw/ 360) * 256,
+                           (us.second.angle.yaw/ 360) * 256, minecraft::varint(0),0,0,0
+                        };
+                        send_packet(spawn_entity, user.sockfd);
+                        send_packet(spawn_entity_user, us.second.sockfd);
+                    }
+                }
+            }
+
             std::tuple<minecraft::varint, unsigned char, float> game_event = 
             {
                 minecraft::varint(0x22), 13, 0.0f
@@ -288,6 +355,16 @@ void execute_packet(packet pkt, User &user)
                     minecraft::varint(0),0, 0, 0, 0, minecraft::varint(0), minecraft::varint(0)
                 };
             send_packet(chunk_data, user.sockfd);
+        }
+    }
+    if (user.state == PLAY)
+    {
+        if (pkt.id == 0x06)
+        {
+            std::tuple<minecraft::string> message;
+            message = read_packet(message, pkt.data);
+            std::string name = std::format("{} [{}]", user.name, user.pronouns);
+            send_chat(std::get<0>(message).str, name);
         }
     }
 }
@@ -346,7 +423,7 @@ int main()
     accept_t.detach();
     std::thread read_t(recv_thread);
     read_t.detach();
-    int ticks_until_keep_alive = 12;
+    int ticks_until_keep_alive = 200;
     while (true)
     {   
         const auto before = clock::now();
@@ -368,12 +445,12 @@ int main()
                 if (user.second.state == PLAY)
                     send_packet(keep_alive, user.second.sockfd);
             }
-            ticks_until_keep_alive = 12;
+            ticks_until_keep_alive = 200;
         }
         else
             ticks_until_keep_alive--;
         const ms duration = clock::now() - before;
-        //log("MSPT ", duration.count(), "ms");
+        log("MSPT ", duration.count(), "ms");
         std::this_thread::sleep_for(std::chrono::milliseconds(50) - duration);
     }
 }

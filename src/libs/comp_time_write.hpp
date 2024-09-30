@@ -200,6 +200,46 @@ struct write_var<minecraft::chunk_rw>
     }
 };
 
+template<>
+struct write_var<minecraft::string_tag>
+{
+    static void call(char_size *v, minecraft::string_tag value)
+    {
+        std::string buf;
+        char id = 0x08;
+        char comp = 0x0a;
+        std::string text = "text";
+        short lenght = 4;
+        char zero = 0;
+        short len = value.len;
+        short len2 = lenght;
+        lenght = htobe16(*(uint16_t*)&lenght);
+        value.len = htobe16(*(uint16_t*)&value.len);
+        
+        std::memcpy(v->data, &comp, sizeof(char));
+        v->data += sizeof(char);
+        v->consumed_size += sizeof(char);
+        std::memcpy(v->data, &id, sizeof(char));
+        v->data += sizeof(char);
+        v->consumed_size += sizeof(char);
+        std::memcpy(v->data, &lenght, sizeof(short));
+        v->data += sizeof(short);
+        v->consumed_size += sizeof(short);
+        std::memcpy(v->data, text.c_str(), len2);
+        v->data += len2;
+        v->consumed_size += len2;
+        std::memcpy(v->data, &value.len, sizeof(short));
+        v->data += sizeof(short);
+        v->consumed_size += sizeof(short);
+        std::memcpy(v->data, value.string.c_str(), len);
+        v->data += len;
+        v->consumed_size += len;
+        std::memcpy(v->data, &zero, sizeof(char));
+        v->data += sizeof(char);
+        v->consumed_size += sizeof(char);
+    }
+};
+
 
 template <typename Integer, Integer ...I, typename F> constexpr void const_for_each(std::integer_sequence<Integer, I...>, F&& func)
 {
