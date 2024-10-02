@@ -17,6 +17,7 @@ struct packet
 	unsigned long size;
 	std::size_t buf_size;
 	char *data;
+	char *start_data;
 	int sock;
 };
 
@@ -159,8 +160,8 @@ long read_position(char *buf)
 
 char *mem_dup(char *buf, int size)
 {
-	char *ret = (char *)calloc(size, sizeof(char));
-	memcpy(ret, buf, (size - 1));
+	char *ret = (char *)calloc(size + 1, sizeof(char));
+	memcpy(ret, buf, (size));
 	return ret;
 }
 

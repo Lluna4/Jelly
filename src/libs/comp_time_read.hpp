@@ -15,7 +15,6 @@ T read_type(char *v)
     T a;
 
     std::memcpy(&a, v, sizeof(T));
-
     switch (sizeof(T))
     {
         case 2:
@@ -31,6 +30,18 @@ T read_type(char *v)
     return a;
 }
 
+template<>
+float read_type<float>(char *v)
+{
+    return read_float(v);
+}
+
+template<>
+double read_type<double>(char *v)
+{
+    return read_double(v);
+}
+
 minecraft::varint read_varint(char *v)
 {
     minecraft::varint a;
@@ -40,7 +51,6 @@ minecraft::varint read_varint(char *v)
     return a;
 }
 
-// Template struct for reading variables
 
 template<typename T>
 struct read_var
