@@ -3,12 +3,12 @@
 #include <vector>
 #include <map>
 #include <thread>
-#include <any>
 #include "libs/packet_processing.hpp"
 #include <chrono>
 #include <errno.h>
 #include <nlohmann/json.hpp>
 #include <sys/sendfile.h>
+#include <math.h>
 #include "libs/comp_time_write.hpp"
 #include "libs/comp_time_read.hpp"
 #include "libs/world_gen.hpp"
@@ -113,8 +113,7 @@ void status_response(User user)
 		}},
 		{"description", {
 			{"text", "Hiiiii!"}
-		}},
-		{"favicon", base64}
+		}}
 	};
 	response_str = response.dump();
 	std::cout << response_str << std::endl;
@@ -182,21 +181,7 @@ void registry_data(User user)
     close(fd);
 }
 
-void send_chat(std::string message, std::string name)
-{
-    std::tuple<minecraft::varint, minecraft::string_tag, minecraft::varint, minecraft::string_tag, bool> chat_message =
-    {
-        minecraft::varint(0x1E), (minecraft::string_tag){.len = (short)message.length(), .string = message},
-        minecraft::varint(1), (minecraft::string_tag){.len = (short)name.length(), .string = name}, false,
-    };
-    for (auto user: users)
-    {
-        if (user.second.state == PLAY)
-        {
-            send_packet(chat_message, user.second.sockfd);
-        }
-    }
-}
+
 
 void update_players_position(User user)
 {
@@ -221,6 +206,51 @@ void update_players_position(User user)
             send_packet(head_angle, user.sockfd);
         }
     }
+}
+
+template<typename ...T>
+void send_everyone(std::tuple<T...> packet)
+{
+    for (auto us: users)
+    {
+        if (us.second.state == PLAY)
+        {
+            send_packet(packet, us.second.sockfd);
+        }
+    }
+}
+
+template<typename ...T>
+void send_everyone_except_user(std::tuple<T...> packet, int id)
+{
+    for (auto us: users)
+    {
+        if (us.second.state == PLAY && us.second.sockfd != id)
+        {
+            send_packet(packet, us.second.sockfd);
+        }
+    }
+}
+
+void send_chat(std::string message, std::string name)
+{
+    std::tuple<minecraft::varint, minecraft::string_tag, minecraft::varint, minecraft::string_tag, bool> chat_message =
+    {
+        minecraft::varint(0x1E), (minecraft::string_tag){.len = (short)message.length(), .string = message},
+        minecraft::varint(1), (minecraft::string_tag){.len = (short)name.length(), .string = name}, false,
+    };
+    send_everyone(chat_message);
+}
+
+bool check_collision(position player, position block)
+{
+   if (player.x + 0.25 < block.x || player.x - 0.25 > block.x + 1) return false;
+    
+   if (player.y + 1.8 < block.y || player.y > block.y + 1) return false;
+    
+   if (player.z + 0.25 < block.z || player.z - 0.25 > block.z + 1) return false;
+    
+    return true;
 }
 
 void execute_packet(packet pkt, User &user)
@@ -441,14 +471,53 @@ void execute_packet(packet pkt, User &user)
             {
                 minecraft::varint(0x03), minecraft::varint(user.sockfd), anim
             };
-            for(auto us: users)
-            {
-                if (us.second.sockfd != user.sockfd)
-                {
-                    send_packet(entity_animation, us.second.sockfd); 
-                }
-            }
+            send_everyone_except_user(entity_animation, user.sockfd);
         }
+        else if (pkt.id == 0x38)
+        {
+            std::tuple<minecraft::varint, long, minecraft::varint, float, float, float, bool, minecraft::varint> use_item_on;
+            use_item_on = read_packet(use_item_on, pkt.data);
+            long val = std::get<1>(use_item_on);
+            std::int32_t x = val >> 38;
+            std::int32_t y = val << 52 >> 52;
+            std::int32_t z = val << 26 >> 38;
+            minecraft::varint face = std::get<2>(use_item_on);
+            if (face.num == 0)
+                y--;
+            else if (face.num == 1)
+                y++;
+            else if (face.num == 2)
+                z--;
+            else if (face.num == 3)
+                z++;
+            else if (face.num == 4)
+                x--;
+            else if (face.num == 5)
+                x++;
+    	    if (check_collision(user.pos, (position){.x = (double)x, .y = (double)y, .z = (double)z}) == true)
+		    return;
+	    
+            unsigned char anim = 0;
+            if (std::get<0>(use_item_on).num == 1)
+                anim = 3;
+            std::tuple<minecraft::varint, minecraft::varint, unsigned char> entity_animation =
+            {
+                minecraft::varint(0x03), minecraft::varint(user.sockfd), anim
+            };
+            send_everyone_except_user(entity_animation, user.sockfd);
+
+            std::tuple<minecraft::varint, long, minecraft::varint> update_block =
+            {
+                minecraft::varint(0x09), (long long)((((x & (unsigned long)0x3FFFFFF) << 38) | ((z & (unsigned long)0x3FFFFFF) << 12) | (y & (unsigned long)0xFFF))), minecraft::varint(9)
+            };
+            send_everyone(update_block);
+
+            std::tuple<minecraft::varint, minecraft::varint> awk_block =
+            {
+                minecraft::varint(0x05), std::get<7>(use_item_on)
+            };
+            send_packet(awk_block, user.sockfd);
+    }
     }
 }
 
@@ -468,7 +537,7 @@ void recv_thread()
         {
             int current_fd = events[i].data.fd;
             int status = recv(current_fd, main_buffer, 1024, 0);
-            log("status: ", status);
+            //log("status: ", status);
             if (status == -1 || status == 0)
             {
                 netlib::disconnect_server(current_fd, epfd);
@@ -530,7 +599,7 @@ int main()
         const auto before = clock::now();
         for (auto pack: tick_packets)
         {
-            //log(std::format("Got a packet with id {} and size {}", pack.id, pack.size));
+            log(std::format("Got a packet with id {} and size {}", pack.id, pack.size));
             auto user_ = users.find(pack.sock);
             if (user_ == users.end())
                 continue;
