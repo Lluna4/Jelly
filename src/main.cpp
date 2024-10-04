@@ -15,6 +15,7 @@
 
 int epfd;
 std::vector<packet> tick_packets;
+unsigned long id = 9;
 using login_play = std::tuple<
                 minecraft::varint, int, bool, minecraft::varint, minecraft::string, minecraft::varint,
                 minecraft::varint, minecraft::varint, bool, bool, bool,
@@ -243,14 +244,10 @@ void send_chat(std::string message, std::string name)
 }
 
 bool check_collision(position player, position block)
-{
-   if (player.x + 0.25 < block.x || player.x - 0.25 > block.x + 1) return false;
-    
-   if (player.y + 1.8 < block.y || player.y > block.y + 1) return false;
-    
-   if (player.z + 0.25 < block.z || player.z - 0.25 > block.z + 1) return false;
-    
-    return true;
+{  
+    return (player.x - 0.3 < block.x + 1 && player.x + 0.3 > block.x &&
+		player.y < block.y + 1 && player.y + 1.8 > block.y &&
+		player.z - 0.3 < block.z + 1 && player.z + 0.3 > block.z);
 }
 
 void execute_packet(packet pkt, User &user)
@@ -405,13 +402,24 @@ void execute_packet(packet pkt, User &user)
                 minecraft::varint(0x22), 13, 0.0f
             };
             send_packet(game_event, user.sockfd);
-            
             minecraft::chunk_rw chunk = find_chunk({.x = 0, .z = 0});
             chunk_data_light chunk_data = {
                     minecraft::varint(0x27), 0, 0, 0x0a, 0x0, minecraft::varint(chunk.size()), chunk, 
                     minecraft::varint(0),0, 0, 0, 0, minecraft::varint(0), minecraft::varint(0)
                 };
-            send_packet(chunk_data, user.sockfd);
+            send_packet(chunk_data, user.sockfd);		
+            for (int y = user.render_distance * -1; y < user.render_distance; y++)
+            {
+                for (int x = user.render_distance * -1; x < user.render_distance; x++)
+                {
+                    minecraft::chunk_rw chunk = find_chunk({.x = x, .z = y});
+                    chunk_data_light chunk_data = {
+                        minecraft::varint(0x27), x, y, 0x0a, 0x0, minecraft::varint(chunk.size()), chunk, 
+                        minecraft::varint(0),0, 0, 0, 0, minecraft::varint(0), minecraft::varint(0)
+                    };
+                    send_packet(chunk_data, user.sockfd);		
+                }
+            }
         }
     }
     if (user.state == PLAY)
@@ -473,6 +481,50 @@ void execute_packet(packet pkt, User &user)
             };
             send_everyone_except_user(entity_animation, user.sockfd);
         }
+        else if (pkt.id = 0x24)
+        {
+            std::tuple<minecraft::varint, long, char, minecraft::varint> player_action;
+            player_action = read_packet(player_action, pkt.data);
+            long val = std::get<1>(player_action);
+            std::int32_t x = val >> 38;
+            std::int32_t y = val << 52 >> 52;
+            std::int32_t z = val << 26 >> 38;
+
+            if (std::get<0>(player_action).num == 2)
+            {
+                unsigned char anim = 0;
+                std::tuple<minecraft::varint, minecraft::varint, unsigned char> entity_animation =
+                {
+                    minecraft::varint(0x03), minecraft::varint(user.sockfd), anim
+                };
+                send_everyone_except_user(entity_animation, user.sockfd);
+
+                std::tuple<minecraft::varint, long, minecraft::varint> update_block =
+                {
+                    minecraft::varint(0x09), (long long)((((x & (unsigned long)0x3FFFFFF) << 38) | ((z & (unsigned long)0x3FFFFFF) << 12) | (y & (unsigned long)0xFFF))), minecraft::varint(0)
+                };
+                send_everyone(update_block);
+
+                std::tuple<minecraft::varint, minecraft::varint> awk_block =
+                {
+                    minecraft::varint(0x05), std::get<3>(player_action)
+                };
+                send_packet(awk_block, user.sockfd);
+            }
+        }
+        else if (pkt.id == 0x32)
+        {
+            std::tuple<short, minecraft::varint, minecraft::varint> set_slot;
+            set_slot = read_packet(set_slot, pkt.data);
+            if (std::get<0>(set_slot) == 36)
+            {
+                if (std::get<1>(set_slot).num > 0)
+                {
+                    log(std::format("Got {} items with id {}", std::get<1>(set_slot).num, std::get<2>(set_slot).num));
+                    id = std::get<2>(set_slot).num;
+                }
+            }
+        }
         else if (pkt.id == 0x38)
         {
             std::tuple<minecraft::varint, long, minecraft::varint, float, float, float, bool, minecraft::varint> use_item_on;
@@ -494,6 +546,15 @@ void execute_packet(packet pkt, User &user)
                 x--;
             else if (face.num == 5)
                 x++;
+            
+            for (auto us: users)
+            {
+                if (us.second.state == PLAY)
+                {
+                    if (check_collision(us.second.pos, (position){.x = (double)x, .y = (double)y, .z = (double)z}) == true)
+		                return;
+                }
+            }
     	    if (check_collision(user.pos, (position){.x = (double)x, .y = (double)y, .z = (double)z}) == true)
 		    return;
 	    
@@ -508,7 +569,7 @@ void execute_packet(packet pkt, User &user)
 
             std::tuple<minecraft::varint, long, minecraft::varint> update_block =
             {
-                minecraft::varint(0x09), (long long)((((x & (unsigned long)0x3FFFFFF) << 38) | ((z & (unsigned long)0x3FFFFFF) << 12) | (y & (unsigned long)0xFFF))), minecraft::varint(9)
+                minecraft::varint(0x09), (long long)((((x & (unsigned long)0x3FFFFFF) << 38) | ((z & (unsigned long)0x3FFFFFF) << 12) | (y & (unsigned long)0xFFF))), minecraft::varint(id)
             };
             send_everyone(update_block);
 
@@ -517,7 +578,7 @@ void execute_packet(packet pkt, User &user)
                 minecraft::varint(0x05), std::get<7>(use_item_on)
             };
             send_packet(awk_block, user.sockfd);
-    }
+        }
     }
 }
 
@@ -593,6 +654,14 @@ int main()
     accept_t.detach();
     std::thread read_t(recv_thread);
     read_t.detach();
+    for (int y = -12; y < 12; y++)
+    {
+        for (int x = -12; x < 12; x++)
+        {
+            find_chunk({.x = x, .z = y});	
+        }
+    }
+    log("world created");
     int ticks_until_keep_alive = 200;
     while (true)
     {   
@@ -629,6 +698,9 @@ int main()
             ticks_until_keep_alive--;
         const ms duration = clock::now() - before;
         //log("MSPT ", duration.count(), "ms");
-        std::this_thread::sleep_for(std::chrono::milliseconds(50) - duration);
+	if (duration.count() > 50)
+		 std::this_thread::sleep_for(std::chrono::milliseconds(1));
+	else
+        	std::this_thread::sleep_for(std::chrono::milliseconds(50) - duration);
     }
 }
