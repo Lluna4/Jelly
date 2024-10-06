@@ -14,6 +14,7 @@
 #include "libs/world_gen.hpp"
 
 int epfd;
+
 std::vector<packet> tick_packets;
 unsigned long id = 9;
 using login_play = std::tuple<
@@ -28,6 +29,8 @@ using chunk_data_light = std::tuple<minecraft::varint, int, int, char, char, min
 
 using json = nlohmann::json;
 
+json blocks;
+json items;
 enum states
 {
     HANDSHAKE,
@@ -65,8 +68,9 @@ class User
             angle = {0.0f, 0.0f};
             on_ground = true;
             sneaking = false;
+            main_block_id = 9;
         }
-        
+        int main_block_id;
         int state;
         int render_distance;
         minecraft::uuid uuid;
@@ -481,7 +485,7 @@ void execute_packet(packet pkt, User &user)
             };
             send_everyone_except_user(entity_animation, user.sockfd);
         }
-        else if (pkt.id = 0x24)
+        else if (pkt.id == 0x24)
         {
             std::tuple<minecraft::varint, long, char, minecraft::varint> player_action;
             player_action = read_packet(player_action, pkt.data);
@@ -490,7 +494,7 @@ void execute_packet(packet pkt, User &user)
             std::int32_t y = val << 52 >> 52;
             std::int32_t z = val << 26 >> 38;
 
-            if (std::get<0>(player_action).num == 2)
+            if (std::get<0>(player_action).num == 0)
             {
                 unsigned char anim = 0;
                 std::tuple<minecraft::varint, minecraft::varint, unsigned char> entity_animation =
@@ -511,6 +515,7 @@ void execute_packet(packet pkt, User &user)
                 };
                 send_packet(awk_block, user.sockfd);
             }
+            log("Removed block");
         }
         else if (pkt.id == 0x32)
         {
@@ -521,6 +526,17 @@ void execute_packet(packet pkt, User &user)
                 if (std::get<1>(set_slot).num > 0)
                 {
                     log(std::format("Got {} items with id {}", std::get<1>(set_slot).num, std::get<2>(set_slot).num));
+                    std::string name = items[id]["name"];
+                    log("name is ", name);
+                    for (auto obj: blocks)
+                    {
+                        std::string name2 = obj["name"];
+                        if (name.compare(name2) == 0)
+                        {
+                            user.main_block_id = obj["defaultState"];
+                            break;
+                        }
+                    }
                     id = std::get<2>(set_slot).num;
                 }
             }
@@ -569,7 +585,7 @@ void execute_packet(packet pkt, User &user)
 
             std::tuple<minecraft::varint, long, minecraft::varint> update_block =
             {
-                minecraft::varint(0x09), (long long)((((x & (unsigned long)0x3FFFFFF) << 38) | ((z & (unsigned long)0x3FFFFFF) << 12) | (y & (unsigned long)0xFFF))), minecraft::varint(id)
+                minecraft::varint(0x09), (long long)((((x & (unsigned long)0x3FFFFFF) << 38) | ((z & (unsigned long)0x3FFFFFF) << 12) | (y & (unsigned long)0xFFF))), minecraft::varint(user.main_block_id)
             };
             send_everyone(update_block);
 
@@ -578,6 +594,7 @@ void execute_packet(packet pkt, User &user)
                 minecraft::varint(0x05), std::get<7>(use_item_on)
             };
             send_packet(awk_block, user.sockfd);
+            log("Placed block");
         }
     }
 }
@@ -662,6 +679,12 @@ int main()
         }
     }
     log("world created");
+    std::ifstream f("items.json");
+    items = json::parse(f);
+    f.close();
+    std::ifstream fs("blocks.json");
+    blocks = json::parse(fs);
+    fs.close();
     int ticks_until_keep_alive = 200;
     while (true)
     {   
