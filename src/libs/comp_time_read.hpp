@@ -86,6 +86,19 @@ struct read_var<minecraft::string>
     }
 };
 
+template<typename ...T>
+struct read_var<std::tuple<T...>>
+{
+    static std::tuple<T...> call(char **v)
+    {
+        std::tuple<T...> ret;
+        constexpr std::size_t size = std::tuple_size_v<decltype(ret)>;
+        char *diff = *v;
+        ret = read_comp_pkt(size, diff, ret);
+        *v += (diff - *v);
+        return ret;
+    }
+};
 
 template <typename Integer, Integer ...I, typename F> constexpr void const_for_each_(std::integer_sequence<Integer, I...>, F&& func)
 {

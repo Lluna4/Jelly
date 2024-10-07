@@ -76,6 +76,16 @@ struct write_var
     }
 };
 
+template<typename ...T>
+struct write_var<std::tuple<T...>>
+{
+    static void call(char_size *v, std::tuple<T...> value)
+    {
+        constexpr std::size_t size = std::tuple_size_v<decltype(value)>;
+        write_comp_pkt(size, *v, value);
+    }
+};
+
 template<>
 struct write_var<minecraft::varint>
 {

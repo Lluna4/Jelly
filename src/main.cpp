@@ -68,9 +68,10 @@ class User
             angle = {0.0f, 0.0f};
             on_ground = true;
             sneaking = false;
-            main_block_id = 9;
+            selected_inv = 36;
+            inventory.resize(46);
         }
-        int main_block_id;
+        int selected_inv;
         int state;
         int render_distance;
         minecraft::uuid uuid;
@@ -83,6 +84,7 @@ class User
         bool on_ground;
         bool sneaking;
         int sockfd;
+        std::vector<unsigned long> inventory;
 };
 std::map<int, User> users;
 
@@ -254,6 +256,22 @@ bool check_collision(position player, position block)
 		player.z - 0.3 < block.z + 1 && player.z + 0.3 > block.z);
 }
 
+void send_world(User user, int x_, int z)
+{
+    for (int y = (user.render_distance * -1) + z; y < (user.render_distance) + z; y++)
+    {
+        for (int x = (user.render_distance * -1) + x_; (x < user.render_distance) + x_; x++)
+        {
+            minecraft::chunk_rw chunk = find_chunk({.x = x, .z = y});
+            chunk_data_light chunk_data = {
+                minecraft::varint(0x27), x, y, 0x0a, 0x0, minecraft::varint(chunk.size()), chunk, 
+                minecraft::varint(0),0, 0, 0, 0, minecraft::varint(0), minecraft::varint(0)
+            };
+            send_packet(chunk_data, user.sockfd);		
+        }
+    }
+}
+
 void execute_packet(packet pkt, User &user)
 {
     if (user.state == HANDSHAKE)
@@ -344,6 +362,20 @@ void execute_packet(packet pkt, User &user)
             };
             send_packet(login, user.sockfd);
 
+            std::tuple<minecraft::varint, minecraft::varint, 
+                std::tuple<char, minecraft::varint, minecraft::varint, minecraft::varint>,
+                std::tuple<char, minecraft::varint, minecraft::varint, minecraft::string>,
+                std::tuple<char, minecraft::varint, minecraft::string, minecraft::varint, minecraft::varint>,
+                minecraft::varint> commands =
+                {
+                    minecraft::varint(0x11), minecraft::varint(3),
+                    {0x00, minecraft::varint(2), minecraft::varint(1), minecraft::varint(2)},
+                    {0x01, minecraft::varint(1), minecraft::varint(2), minecraft::string("pronouns")},
+                    {0x02, minecraft::varint(0), minecraft::string("pronouns"), minecraft::varint(5), minecraft::varint(2)},
+                    minecraft::varint(0)
+                };
+
+            send_packet(commands, user.sockfd);
             std::tuple<minecraft::varint, double, double, double, float, float, char, minecraft::varint> sync_pos =
             {
                 minecraft::varint(0x40), user.pos.x, user.pos.y, user.pos.z, user.angle.yaw, user.angle.pitch, 0, minecraft::varint(0x0)
@@ -412,23 +444,34 @@ void execute_packet(packet pkt, User &user)
                     minecraft::varint(0),0, 0, 0, 0, minecraft::varint(0), minecraft::varint(0)
                 };
             send_packet(chunk_data, user.sockfd);		
-            for (int y = user.render_distance * -1; y < user.render_distance; y++)
-            {
-                for (int x = user.render_distance * -1; x < user.render_distance; x++)
-                {
-                    minecraft::chunk_rw chunk = find_chunk({.x = x, .z = y});
-                    chunk_data_light chunk_data = {
-                        minecraft::varint(0x27), x, y, 0x0a, 0x0, minecraft::varint(chunk.size()), chunk, 
-                        minecraft::varint(0),0, 0, 0, 0, minecraft::varint(0), minecraft::varint(0)
-                    };
-                    send_packet(chunk_data, user.sockfd);		
-                }
-            }
+            std::thread send_world_th(send_world, user, 0, 0);
+            send_world_th.detach();
         }
     }
     if (user.state == PLAY)
     {
-        if (pkt.id == 0x06)
+        if (pkt.id == 0x04)
+        {
+            std::tuple<minecraft::string> command;
+            command = read_packet(command, pkt.data);
+            std::string commands = std::get<0>(command).str;
+            log(commands);
+            if (commands.starts_with("pronouns"))
+            {
+                std::string command_contents = commands.substr(commands.find(' ') + 1);
+                user.pronouns = command_contents;
+                std::string user_name = std::format("{} [{}]", user.name, user.pronouns);
+                std::tuple<minecraft::varint, char, minecraft::varint, minecraft::uuid,
+                        minecraft::string, minecraft::varint, bool ,bool, minecraft::string_tag> info_update_head_user =
+                        {
+                            minecraft::varint(0x3E), 0x01 |0x08 | 0x20, minecraft::varint(1), user.uuid, 
+                            minecraft::string(user.name), minecraft::varint(0), true, true,
+                            minecraft::string_tag{.len = (short)user_name.length(), .string = user_name}
+                        };
+                send_everyone(info_update_head_user);
+            }
+        }
+        else if (pkt.id == 0x06)
         {
             std::tuple<minecraft::string> message;
             message = read_packet(message, pkt.data);
@@ -517,28 +560,37 @@ void execute_packet(packet pkt, User &user)
             }
             log("Removed block");
         }
+        else if (pkt.id == 0x2F)
+        {
+            std::tuple<short> set_held_item;
+            set_held_item = read_packet(set_held_item, pkt.data);
+            user.selected_inv = std::get<0>(set_held_item) + 36;
+        }
         else if (pkt.id == 0x32)
         {
-            std::tuple<short, minecraft::varint, minecraft::varint> set_slot;
+            std::tuple<short, minecraft::varint> set_slot;
             set_slot = read_packet(set_slot, pkt.data);
-            if (std::get<0>(set_slot) == 36)
+            pkt.data += 3;
+            if (std::get<1>(set_slot).num > 0)
             {
-                if (std::get<1>(set_slot).num > 0)
+                std::tuple<minecraft::varint> item_id;
+                item_id = read_packet(item_id, pkt.data);
+                log(std::format("Got {} items with id {}", std::get<1>(set_slot).num, std::get<0>(item_id).num));
+                std::string name = items[std::get<0>(item_id).num]["name"];
+                log("name is ", name);
+                for (auto obj: blocks)
                 {
-                    log(std::format("Got {} items with id {}", std::get<1>(set_slot).num, std::get<2>(set_slot).num));
-                    std::string name = items[id]["name"];
-                    log("name is ", name);
-                    for (auto obj: blocks)
+                    std::string name2 = obj["name"];
+                    if (name.compare(name2) == 0)
                     {
-                        std::string name2 = obj["name"];
-                        if (name.compare(name2) == 0)
-                        {
-                            user.main_block_id = obj["defaultState"];
-                            break;
-                        }
+                        user.inventory[std::get<0>(set_slot)] = obj["defaultState"];
+                        break;
                     }
-                    id = std::get<2>(set_slot).num;
                 }
+            }
+            else if (std::get<1>(set_slot).num == 0)
+            {
+                user.inventory[std::get<0>(set_slot)] = 0;
             }
         }
         else if (pkt.id == 0x38)
@@ -585,7 +637,7 @@ void execute_packet(packet pkt, User &user)
 
             std::tuple<minecraft::varint, long, minecraft::varint> update_block =
             {
-                minecraft::varint(0x09), (long long)((((x & (unsigned long)0x3FFFFFF) << 38) | ((z & (unsigned long)0x3FFFFFF) << 12) | (y & (unsigned long)0xFFF))), minecraft::varint(user.main_block_id)
+                minecraft::varint(0x09), (long long)((((x & (unsigned long)0x3FFFFFF) << 38) | ((z & (unsigned long)0x3FFFFFF) << 12) | (y & (unsigned long)0xFFF))), minecraft::varint(user.inventory[user.selected_inv])
             };
             send_everyone(update_block);
 
