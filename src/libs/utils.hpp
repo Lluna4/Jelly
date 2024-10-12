@@ -17,6 +17,8 @@ struct packet
 	unsigned long size;
 	std::size_t buf_size;
 	char *data;
+	char *start_data;
+	int sock;
 };
 
 struct pkt
@@ -86,10 +88,11 @@ std::string encodeSignedLEB128(int32_t value) {
     return encoded;
 }
 
-void write_string(std::string &str, std::string src)
+size_t write_string(std::string &str, std::string src)
 {
-	WriteUleb128(str, src.length());
+	size_t size = WriteUleb128(str, src.length());
 	str.append(src);
+	return size;
 }
 
 
@@ -98,10 +101,11 @@ unsigned long read_string(char *str, std::string &dest)
 {
 	unsigned long ret = 0;
 
-	ReadUleb128(str, &ret);
+	size_t size = ReadUleb128(str, &ret);
 	str++;
 	dest = str;
 	dest = dest.substr(0, ret);
+	ret += size;
 	return ret;
 }
 
@@ -156,8 +160,8 @@ long read_position(char *buf)
 
 char *mem_dup(char *buf, int size)
 {
-	char *ret = (char *)calloc(size, sizeof(char));
-	memcpy(ret, buf, (size - 1));
+	char *ret = (char *)calloc(size + 1, sizeof(char));
+	memcpy(ret, buf, (size));
 	return ret;
 }
 
@@ -188,12 +192,30 @@ namespace minecraft
 {
 	struct string
 	{
+		string()
+		{}
+
+        string(std::string str_)
+        :str(str_)
+		{
+			len = str_.length();
+		}
 		unsigned long len;
-		std::string string;
+		std::string str;
 	};
 
 	struct varint
 	{
+		varint()
+		{}
+
+        varint(unsigned long num_)
+        :num(num_)
+		{
+			std::string dummy;
+			size = WriteUleb128(dummy, num_);
+		}
+		unsigned long size;
 		unsigned long num;
 	};
 
@@ -215,8 +237,16 @@ namespace minecraft
 
 	struct string_tag
 	{
+		string_tag()
+		{}
+
+        string_tag(std::string str_)
+        :str(str_)
+		{
+			len = str_.length();
+		}
 		short len;
-		std::string string;
+		std::string str;
 	};
 
 	struct varint read_varint(char *buf)
@@ -224,7 +254,7 @@ namespace minecraft
 		unsigned long ret = 0;
 
 		ReadUleb128(buf, &ret);
-		return (varint){.num = ret};
+		return varint(ret);
 	}
 
 	struct node_root
@@ -263,7 +293,7 @@ void send_varint(int fd, unsigned long val)
 void send_string(int fd, minecraft::string str)
 {
 	send_varint(fd, str.len);
-	send(fd, str.string.c_str(), str.string.length(), 0);
+	send(fd, str.str.c_str(), str.str.length(), 0);
 }
 
 static std::vector<std::bitset<6>> proc_6bit(std::string hi)

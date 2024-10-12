@@ -43,9 +43,9 @@ std::bitset<64> concat(std::vector<std::bitset<4>> &vec, int index, int change_i
 
 constexpr minecraft::paletted_container_rw world_gen_inderect(bool surface = false)
 {
-    minecraft::paletted_container_rw ret = {.bits_per_entry = 4, .palette_data_entries = (minecraft::varint){.num = 4}, 
-    .block_ids = {(minecraft::varint){.num = 0}, (minecraft::varint){.num = 9}, (minecraft::varint){.num = 10}, (minecraft::varint){.num = 404}}, 
-    .data_lenght = (minecraft::varint){.num = 256}};
+    minecraft::paletted_container_rw ret = {.bits_per_entry = 4, .palette_data_entries = minecraft::varint(4), 
+    .block_ids = {minecraft::varint(0), minecraft::varint(9), minecraft::varint(10), minecraft::varint(404)}, 
+    .data_lenght = minecraft::varint(256)};
 
     int index = 0;
     std::vector<unsigned long> longs;
@@ -80,9 +80,9 @@ constexpr minecraft::paletted_container_rw world_gen_inderect(bool surface = fal
 
 constexpr minecraft::paletted_container_rw world_gen_inderect_empty()
 {
-    minecraft::paletted_container_rw ret = {.bits_per_entry = 4, .palette_data_entries = (minecraft::varint){.num = 4}, 
-    .block_ids = {(minecraft::varint){.num = 0}, (minecraft::varint){.num = 9}, (minecraft::varint){.num = 10}, (minecraft::varint){.num = 404}}, 
-    .data_lenght = (minecraft::varint){.num = 256}};
+    minecraft::paletted_container_rw ret = {.bits_per_entry = 4, .palette_data_entries = minecraft::varint(4), 
+    .block_ids = {minecraft::varint(0), minecraft::varint(9), minecraft::varint(10), minecraft::varint(404)}, 
+    .data_lenght = minecraft::varint(256)};
 
     int index = 0;
     std::vector<unsigned long> longs;
@@ -135,7 +135,7 @@ constexpr minecraft::paletted_container_rw world_gen_inderect_empty()
 constexpr minecraft::paletted_container_rw biome_gen()
 {
     minecraft::paletted_container_rw ret = {.bits_per_entry = 0, 
-    .block_ids = {(minecraft::varint){.num = 0}}, .data_lenght = (minecraft::varint){.num = 0}, .block_indexes = {}};
+    .block_ids = {minecraft::varint(0)}, .data_lenght = minecraft::varint(0), .block_indexes = {}};
     return ret;
 }
 

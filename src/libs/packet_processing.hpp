@@ -12,10 +12,11 @@
 #include "logging.hpp"
 #include <cstring>
 #include <stdlib.h>
+#include "comp_time_read.hpp"
 
 
 
-std::vector<packet> process_packet(char *pkt)
+std::vector<packet> process_packet(char *pkt, int sock)
 {
 	int lenght = 0;
 	char *next = NULL;
@@ -23,21 +24,16 @@ std::vector<packet> process_packet(char *pkt)
 	struct packet p = {0};
 	char *data = NULL;
 	p.id = 0;
-	while(1)
-	{
-		if (*pkt == '\0')
-			break;
-        p.size = pkt[0];
-		next = pkt + (p.size + 1);
-		pkt++;
-        p.id = *pkt;
-		data = (char *)calloc(p.size, sizeof(char));
-		pkt++;
-		std::memcpy(data, pkt, p.size - 1);
-		p.data = strdup(data);
-		free(data);
-		pkt = next;
-		packets.push_back(p);
-	}
+	if (*pkt == '\0')
+		return packets;
+	std::tuple<minecraft::varint, minecraft::varint> header;
+	header = read_packet(header, pkt);
+	pkt += std::get<0>(header).size + std::get<1>(header).size;
+	p.data = mem_dup(pkt, std::get<0>(header).num);
+	p.id = std::get<1>(header).num;
+	p.size = std::get<0>(header).num;
+	p.start_data = p.data;
+	p.sock = sock;
+	packets.push_back(p);
     return packets;
 }
