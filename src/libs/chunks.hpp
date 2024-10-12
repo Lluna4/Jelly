@@ -1,93 +1,132 @@
 #pragma once
 #include <iostream>
-#include <unordered_map>
-#include "logging.hpp"
 #include <vector>
-#include <bitset>
+#include <unordered_map>
 #include "utils.hpp"
-#include <functional>
+
+enum palette_type
+{
+	SINGLE_VALUED,
+	INDIRECT,
+	DIRECT
+};
+
+
 
 namespace minecraft
 {
-	struct chunk_pos
+	struct paletted_container
 	{
-		int x;
-		int z;
-
-		bool operator == (const chunk_pos& pos) const
+		paletted_container()
 		{
-			return (x == pos.x) && (z == pos.z);
+			type = SINGLE_VALUED;
+			value = 0;
+			data_size = varint(0);
+			data = std::make_unique<char []>(1);
+			data[0] = 0;
 		}
-	};
-	struct paletted_container_rw
-	{
-		unsigned char bits_per_entry;
-		varint palette_data_entries;
-		std::vector<varint> block_ids;
-		varint data_lenght;
-		std::vector<unsigned long> block_indexes;
-		std::vector<std::bitset<4>> block_indexes_nums;
-	};
-	struct chunk_section_rw
-	{
-		short block_count;
-		paletted_container_rw blocks;
-		paletted_container_rw biome;
-	};
-	struct chunk_rw
-	{
-		std::vector<chunk_section_rw> chunks;
-
-		int size()
+		paletted_container(unsigned char bpe,bool chunk, varint val = 0, std::vector<varint> pal = {0})
+		:bits_per_entry(bpe)
 		{
-			int ret = 0;
-			std::string buf;
-			std::size_t size = 0;
-			for (int x = 0; x < chunks.size(); x++)
+			if (bpe == 0)
 			{
-				ret += sizeof(short);
-				minecraft::paletted_container_rw cont = chunks[x].blocks;
-
-				ret += sizeof(unsigned char);
-
-				ret += WriteUleb128(buf, cont.palette_data_entries.num);
-				for (int i = 0; i < cont.block_ids.size(); i++)
-					ret += WriteUleb128(buf, cont.block_ids[i].num);
-
-				ret += WriteUleb128(buf, cont.data_lenght.num);
-
-				ret += (sizeof(long) * cont.block_indexes.size());
-				
-				minecraft::paletted_container_rw cont2 = chunks[x].biome;
-
-				ret += sizeof(unsigned char);
-
-				ret += WriteUleb128(buf, cont2.block_ids[0].num);
-
-				ret += WriteUleb128(buf, cont2.data_lenght.num);
-
-				for (int i = 0; i < cont2.block_indexes.size(); i++)
+				type = SINGLE_VALUED;
+				value = val;
+				data_size = varint(0);
+				data = std::make_unique<char []>(1);
+				data[0] = 0;
+			}
+			else if (bpe == 8)
+			{
+				if (chunk == true)
 				{
-					ret += sizeof(long);
+					type = INDIRECT;
+					palette = pal;
+					data = std::make_shared<char []>(4097);
+					if (data == NULL)
+						std::runtime_error("Malloc failed");
+					if (palette.size() > 1)
+						memset(data.get(), 1, 4096);
+					else 
+						memset(data.get(), 0, 4096);
+					data_size = varint(512);
 				}
 			}
-			return ret;
 		}
+		int type;
+		unsigned char bits_per_entry;
+		varint value;
+		std::vector<varint> palette;
+		varint data_size;
+		std::shared_ptr<char[]> data;
 	};
-
-}
+	
+	struct chunk_section
+	{
+		chunk_section(bool full, std::vector<varint> palette = {varint(0), varint(1)})
+		{
+			if (full)
+			{
+				block_count = 4096;
+				blocks = paletted_container(8, true, 0, palette);
+				biome = paletted_container(0, false);
+			}
+			else
+			{
+				block_count = 0;
+				blocks = paletted_container(0, true);
+				biome = paletted_container(0, false);
+			}
+		}
+		short block_count;
+		paletted_container blocks;
+		paletted_container biome;
+	};
+	struct chunk
+	{
+		chunk()
+		{
+			for (int i = 0; i < 24; i++)
+			{
+					sections.emplace_back(false);
+			}
+			x = 0;
+			z = 0;
+		}
+		chunk(int x_, int z_, std::vector<varint> palette = {varint(0), varint(9)})
+		:x(x_), z(z_)
+		{
+			for (int i = 0; i < 24; i++)
+			{
+				if (i < 8)
+					sections.emplace_back(true, palette);
+				else
+					sections.emplace_back(false, palette);
+			}
+		}
+		int x;
+		int z;
+		std::vector<chunk_section> sections;
+	};
+};
 
 namespace std {
   template <>
-  struct hash<minecraft::chunk_pos> 
+  struct hash<std::pair<int, int>> 
   {
-    size_t operator()(const minecraft::chunk_pos& product) const {
-      // Combine hash values of id and name using bitwise XOR
-      return std::hash<int>()(product.x) ^ std::hash<int>()(product.z);
+    size_t operator()(const std::pair<int, int>& product) const {
+      return std::hash<int>()(product.first) ^ std::hash<int>()(product.second);
     }
   };
 }
 
-std::unordered_map<minecraft::chunk_pos, minecraft::chunk_rw> chunks_r;
+std::unordered_map<std::pair<int, int>, minecraft::chunk> chunks;
 
-
+minecraft::chunk find_chunk(int x, int z)
+{
+	if (chunks.find({x, z}) == chunks.end()) //if it doesnt find a chunk it generates one
+	{
+		chunks.insert({{x, z}, minecraft::chunk(x, z)});
+	}
+	return chunks[{x, z}];
+}

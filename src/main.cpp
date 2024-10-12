@@ -11,7 +11,7 @@
 #include <math.h>
 #include "libs/comp_time_write.hpp"
 #include "libs/comp_time_read.hpp"
-#include "libs/world_gen.hpp"
+#include "libs/chunks.hpp"
 
 int epfd;
 
@@ -23,7 +23,7 @@ using login_play = std::tuple<
                 minecraft::varint, minecraft::string, long,
                 unsigned char, char, bool, bool, bool, minecraft::varint, bool>;
 
-using chunk_data_light = std::tuple<minecraft::varint, int, int, char, char, minecraft::varint, minecraft::chunk_rw,
+using chunk_data_light = std::tuple<minecraft::varint, int, int, char, char, minecraft::chunk,
                                     minecraft::varint, char, char, char, char, minecraft::varint,
                                     minecraft::varint>;
 
@@ -243,8 +243,8 @@ void send_chat(std::string message, std::string name)
 {
     std::tuple<minecraft::varint, minecraft::string_tag, minecraft::varint, minecraft::string_tag, bool> chat_message =
     {
-        minecraft::varint(0x1E), (minecraft::string_tag){.len = (short)message.length(), .string = message},
-        minecraft::varint(1), (minecraft::string_tag){.len = (short)name.length(), .string = name}, false,
+        minecraft::varint(0x1E), minecraft::string_tag(message),
+        minecraft::varint(1), minecraft::string_tag(name), false,
     };
     send_everyone(chat_message);
 }
@@ -262,14 +262,23 @@ void send_world(User user, int x_, int z)
     {
         for (int x = (user.render_distance * -1) + x_; (x < user.render_distance) + x_; x++)
         {
-            minecraft::chunk_rw chunk = find_chunk({.x = x, .z = y});
+            minecraft::chunk chunk = find_chunk(x, z);
             chunk_data_light chunk_data = {
-                minecraft::varint(0x27), x, y, 0x0a, 0x0, minecraft::varint(chunk.size()), chunk, 
+                minecraft::varint(0x27), x, y, 0x0a, 0x0, chunk, 
                 minecraft::varint(0),0, 0, 0, 0, minecraft::varint(0), minecraft::varint(0)
             };
             send_packet(chunk_data, user.sockfd);		
         }
     }
+}
+
+void system_chat(minecraft::string message)
+{
+    std::tuple<minecraft::varint, minecraft::string_tag, bool> system_chat = 
+    {
+        minecraft::varint(0x6C), minecraft::string_tag(message.str), false
+    };
+    send_everyone(system_chat);
 }
 
 void execute_packet(packet pkt, User &user)
@@ -388,7 +397,7 @@ void execute_packet(packet pkt, User &user)
                     {
                         minecraft::varint(0x3E), 0x01 |0x08 | 0x20, minecraft::varint(1), user.uuid, 
                         minecraft::string(user.name), minecraft::varint(0), true, true,
-                        minecraft::string_tag{.len = (short)user_name.length(), .string = user_name}
+                        minecraft::string_tag(user_name)
                     };
             std::tuple<minecraft::varint, minecraft::varint, minecraft::uuid, minecraft::varint, double,
             double, double, char, char, char, minecraft::varint,
@@ -400,6 +409,7 @@ void execute_packet(packet pkt, User &user)
                 (user.angle.pitch/ 360) * 256, (user.angle.yaw/ 360) * 256,
                 (user.angle.yaw/ 360) * 256, minecraft::varint(0),0,0,0
             };
+            system_chat(minecraft::string(std::format("{} connected", user.name)));
             for (auto us: users)
             {
                 if (us.second.state == PLAY)
@@ -410,7 +420,7 @@ void execute_packet(packet pkt, User &user)
                             {
                                 minecraft::varint(0x3E), 0x01 |0x08 | 0x20, minecraft::varint(1), us.second.uuid, 
                                 minecraft::string(us.second.name), minecraft::varint(0), true, true,
-                                minecraft::string_tag{.len = (short)name.length(), .string = name}
+                                minecraft::string_tag(name)
                             };
                     send_packet(info_update_head, user.sockfd);
                     if (user.sockfd != us.second.sockfd)
@@ -438,9 +448,9 @@ void execute_packet(packet pkt, User &user)
                 minecraft::varint(0x22), 13, 0.0f
             };
             send_packet(game_event, user.sockfd);
-            minecraft::chunk_rw chunk = find_chunk({.x = 0, .z = 0});
+            minecraft::chunk chunk = find_chunk(0, 0);
             chunk_data_light chunk_data = {
-                    minecraft::varint(0x27), 0, 0, 0x0a, 0x0, minecraft::varint(chunk.size()), chunk, 
+                    minecraft::varint(0x27), 0, 0, 0x0a, 0x0, chunk,
                     minecraft::varint(0),0, 0, 0, 0, minecraft::varint(0), minecraft::varint(0)
                 };
             send_packet(chunk_data, user.sockfd);		
@@ -466,7 +476,7 @@ void execute_packet(packet pkt, User &user)
                         {
                             minecraft::varint(0x3E), 0x01 |0x08 | 0x20, minecraft::varint(1), user.uuid, 
                             minecraft::string(user.name), minecraft::varint(0), true, true,
-                            minecraft::string_tag{.len = (short)user_name.length(), .string = user_name}
+                            minecraft::string_tag(user_name)
                         };
                 send_everyone(info_update_head_user);
             }
@@ -671,7 +681,9 @@ void recv_thread()
             if (status == -1 || status == 0)
             {
                 netlib::disconnect_server(current_fd, epfd);
-                minecraft::uuid uuid = users.find(current_fd)->second.uuid;
+                auto current_user = users.find(current_fd)->second;
+                minecraft::uuid uuid = current_user.uuid;
+                system_chat(minecraft::string(std::format("{} disconnected", current_user.name)));
                 users.erase(current_fd);
                 
                 std::tuple<minecraft::varint, minecraft::varint, minecraft::varint> remove_entity = 
@@ -682,6 +694,7 @@ void recv_thread()
                 {
                     minecraft::varint(0x3D), minecraft::varint(1), uuid
                 };
+                system_chat(minecraft::string(std::format("{} disconnected", current_user.name)));
                 for (auto user: users)
                 {
                     if (user.second.state == PLAY)
@@ -727,7 +740,7 @@ int main()
     {
         for (int x = -12; x < 12; x++)
         {
-            find_chunk({.x = x, .z = y});	
+            find_chunk(x, y);	
         }
     }
     log("world created");
@@ -773,9 +786,9 @@ int main()
             ticks_until_keep_alive--;
         const ms duration = clock::now() - before;
         //log("MSPT ", duration.count(), "ms");
-	if (duration.count() > 50)
-		 std::this_thread::sleep_for(std::chrono::milliseconds(1));
-	else
-        	std::this_thread::sleep_for(std::chrono::milliseconds(50) - duration);
+        if (duration.count() > 50)
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        else
+                std::this_thread::sleep_for(std::chrono::milliseconds(50) - duration);
     }
 }

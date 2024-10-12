@@ -237,8 +237,16 @@ namespace minecraft
 
 	struct string_tag
 	{
+		string_tag()
+		{}
+
+        string_tag(std::string str_)
+        :str(str_)
+		{
+			len = str_.length();
+		}
 		short len;
-		std::string string;
+		std::string str;
 	};
 
 	struct varint read_varint(char *buf)
