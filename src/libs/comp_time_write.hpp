@@ -104,6 +104,7 @@ struct write_var<minecraft::varint>
     }
 };
 
+
 template<>
 struct write_var<char_size>
 {
@@ -195,16 +196,38 @@ struct write_var<minecraft::chunk>
             }
             else if (value.sections[i].blocks.type == INDIRECT)
             {
-                std::tuple<short, unsigned char, minecraft::varint, std::vector<minecraft::varint>, minecraft::varint, char_size> data
+                std::tuple<short, unsigned char, minecraft::varint, std::vector<minecraft::varint>, minecraft::varint> data
                 {
                     value.sections[i].block_count, value.sections[i].blocks.bits_per_entry,
                     minecraft::varint(value.sections[i].blocks.palette.size()), value.sections[i].blocks.palette,
-                    value.sections[i].blocks.data_size,(char_size){.data = value.sections[i].blocks.data.get(), .consumed_size = (int)value.sections[i].blocks.data_size.num * 8,
-                        .max_size = (int)value.sections[i].blocks.data_size.num * 8 + 1, .start_data = value.sections[i].blocks.data.get()}
+                    value.sections[i].blocks.data_size
                 };
                 constexpr std::size_t size = std::tuple_size_v<decltype(data)>;
                
                 write_comp_pkt(size, a, data);
+                char *long_dat = (char *)calloc(9, sizeof(char));
+                char long_index = 0;
+                for (int x = 0; x < 4096; x++)
+                {
+                    if (long_index == 8)
+                    {
+                        long new_long = 0;
+                        std::memcpy(&new_long, long_dat, sizeof(long));
+                        std::tuple<long> long_enc = {new_long};
+                        constexpr std::size_t size_ = std::tuple_size_v<decltype(long_enc)>;
+                        write_comp_pkt(size_, a, long_enc);
+                        memset(long_dat, 0, sizeof(long));
+                        long_index = 0;
+                    }
+                    long_dat[long_index] = value.sections[i].blocks.data[x];
+                    long_index++;
+                }
+                long new_long = 0;
+                std::memcpy(&new_long, long_dat, sizeof(long));
+                std::tuple<long> long_enc = {new_long};
+                constexpr std::size_t size_ = std::tuple_size_v<decltype(long_enc)>;
+                write_comp_pkt(size_, a, long_enc);
+                free(long_dat);
             }
             if (value.sections[i].biome.type == SINGLE_VALUED)
             {
@@ -225,8 +248,8 @@ struct write_var<minecraft::chunk>
                 {
                     value.sections[i].biome.bits_per_entry,minecraft::varint(value.sections[i].biome.palette.size()), 
                     value.sections[i].biome.palette,value.sections[i].biome.data_size,(char_size){.data = value.sections[i].biome.data.get(), 
-                    .consumed_size = (int)value.sections[i].biome.data_size.num * 8,
-                        .max_size = (int)value.sections[i].biome.data_size.num * 8 + 1, .start_data = value.sections[i].biome.data.get()}
+                    .consumed_size = value.sections[i].biome.data_size.num * 8,
+                        .max_size = value.sections[i].biome.data_size.num * 8 + 1, .start_data = value.sections[i].biome.data.get()}
                 };
                 constexpr std::size_t size = std::tuple_size_v<decltype(data)>;
                

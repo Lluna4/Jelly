@@ -68,24 +68,56 @@ std::size_t WriteUleb128(std::string &dest, unsigned long val)
   return count;
 }
 
-std::string encodeSignedLEB128(int32_t value) {
-    std::string encoded;
-    bool more = true;
-    while (more) {
-        uint8_t byte = value & 0x7F; // Extract the lower 7 bits
-        value >>= 7; // Shift right by 7 to process the next bits
+std::size_t WriteSleb128(std::string &dest, long val)
+{
+  std::size_t count = 0;
+  bool more = true;
 
-        // Check if more bytes are needed to encode the number correctly
-        // The value != 0 checks whether all remaining bits are 0
-        // The value != -1 checks whether all remaining bits are 1 (for negative numbers)
-        if ((value == 0 && (byte & 0x40) == 0) || (value == -1 && (byte & 0x40) != 0)) {
-            more = false;
-        } else {
-            byte |= 0x80; // Set the continuation bit if more bytes are needed
-        }
-        encoded += static_cast<char>(byte);
-    }
-    return encoded;
+  while (more) {
+    unsigned char byte = val & 0x7f; // Get the lower 7 bits
+    val >>= 7; // Arithmetic shift to preserve the sign bit
+
+    // Check if more bytes are needed
+    bool has_more = !(((val == 0) && ((byte & 0x40) == 0)) || ((val == -1) && ((byte & 0x40) != 0)));
+    if (has_more)
+      byte |= 0x80; // Set the continuation bit if more bytes follow
+
+    dest.push_back(byte);
+    count++;
+    more = has_more;
+  }
+
+  return count;
+}
+
+
+
+
+
+inline unsigned encodeSLEB128(int64_t Value, char *p, unsigned PadTo = 0) {
+  char *orig_p = p;
+  unsigned Count = 0;
+  bool More;
+  do {
+    uint8_t Byte = Value & 0x7f;
+    // NOTE: this assumes that this signed shift is an arithmetic right shift.
+    Value >>= 7;
+    More = !((((Value == 0 ) && ((Byte & 0x40) == 0)) ||
+              ((Value == -1) && ((Byte & 0x40) != 0))));
+    Count++;
+    if (More || Count < PadTo)
+      Byte |= 0x80; // Mark this byte to show that more bytes will follow.
+    *p++ = Byte;
+  } while (More);
+ 
+  // Pad with 0x80 and emit a terminating byte at the end.
+  if (Count < PadTo) {
+    uint8_t PadValue = Value < 0 ? 0x7f : 0x00;
+    for (; Count < PadTo - 1; ++Count)
+      *p++ = (PadValue | 0x80);
+    *p++ = PadValue;
+  }
+  return (unsigned)(p - orig_p);
 }
 
 size_t write_string(std::string &str, std::string src)
@@ -217,6 +249,21 @@ namespace minecraft
 		}
 		unsigned long size;
 		unsigned long num;
+	};
+
+	struct signed_varint
+	{
+		signed_varint()
+		{}
+
+        signed_varint(long num_)
+        :num(num_)
+		{
+			std::string dummy;
+			size = WriteSleb128(dummy, num_);
+		}
+		long size;
+		long num;
 	};
 
 	struct uuid {

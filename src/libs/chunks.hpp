@@ -93,12 +93,12 @@ namespace minecraft
 			x = 0;
 			z = 0;
 		}
-		chunk(int x_, int z_, std::vector<varint> palette = {varint(0), varint(9)})
+		chunk(int x_, int z_, char surface = 8,std::vector<varint> palette = {varint(0), varint(9)})
 		:x(x_), z(z_)
 		{
 			for (int i = 0; i < 24; i++)
 			{
-				if (i < 8)
+				if (i < surface)
 					sections.emplace_back(true, palette);
 				else
 					sections.emplace_back(false, palette);
