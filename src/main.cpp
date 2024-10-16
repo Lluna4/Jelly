@@ -343,7 +343,7 @@ void update_visible_chunks()
             position pos = user.second.pos;
             chunk_pos_ curr_pos = {(int)(floor(pos.x/16.0f)), (int)(floor(pos.z/16.0f))};
             chunk_pos_ prev_pos = user.second.chunk_pos;
-            log(std::format("curr pos x {} z {}", curr_pos.x, curr_pos.z));
+            //log(std::format("curr pos x {} z {}", curr_pos.x, curr_pos.z));
             if (curr_pos.x == prev_pos.x && curr_pos.z == prev_pos.z)
             {
                 users.find(user.second.sockfd)->second.chunk_pos = curr_pos;
@@ -606,9 +606,8 @@ void execute_packet(packet pkt, User &user)
                     minecraft::varint(0x27), 0, 0, 0x0a, 0x0, chunk,
                     minecraft::varint(0),0, 0, 0, 0, minecraft::varint(0), minecraft::varint(0)
                 };
-            send_packet(chunk_data, user.sockfd);		
-            std::thread send_world_th(send_world, user, 0, 0);
-            send_world_th.detach();
+            send_packet(chunk_data, user.sockfd);
+            send_world(user, 0, 0);
         }
     }
     if (user.state == PLAY)
@@ -713,8 +712,20 @@ void execute_packet(packet pkt, User &user)
                 {
                     minecraft::varint(0x09), (long long)((((x & (unsigned long)0x3FFFFFF) << 38) | ((z & (unsigned long)0x3FFFFFF) << 12) | (y & (unsigned long)0xFFF))), minecraft::varint(0)
                 };
-                send_everyone(update_block);
-
+                float chunk_pos_x = floor(x/16.0f);
+                float chunk_pos_z = floor(z/16.0f);
+                for (auto us: users)
+                {
+                    
+                    if (us.second.state == PLAY)
+                    {
+                        if (us.second.chunk_pos.x + us.second.render_distance > (int)chunk_pos_x && us.second.chunk_pos.x - us.second.render_distance < (int)chunk_pos_x)
+                        {
+                            if (us.second.chunk_pos.z + us.second.render_distance > (int)chunk_pos_z && us.second.chunk_pos.z - us.second.render_distance < (int)chunk_pos_z)
+                                send_packet(update_block, us.second.sockfd);
+                        }
+                    }
+                }
                 std::tuple<minecraft::varint, minecraft::varint> awk_block =
                 {
                     minecraft::varint(0x05), std::get<3>(player_action)
@@ -803,8 +814,22 @@ void execute_packet(packet pkt, User &user)
             {
                 minecraft::varint(0x09), (long long)((((x & (unsigned long)0x3FFFFFF) << 38) | ((z & (unsigned long)0x3FFFFFF) << 12) | (y & (unsigned long)0xFFF))), minecraft::varint(user.inventory[user.selected_inv])
             };
-            send_everyone(update_block);
-
+            float chunk_pos_x = floor(x/16.0f);
+            float chunk_pos_z = floor(z/16.0f);
+            
+            for (auto us: users)
+            {
+                
+                if (us.second.state == PLAY)
+                {
+                    if (us.second.chunk_pos.x + us.second.render_distance > (int)chunk_pos_x && us.second.chunk_pos.x - us.second.render_distance < (int)chunk_pos_x)
+                    {
+                        if (us.second.chunk_pos.z + us.second.render_distance > (int)chunk_pos_z && us.second.chunk_pos.z - us.second.render_distance < (int)chunk_pos_z)
+                            send_packet(update_block, us.second.sockfd);
+                    }
+                }
+            }
+            
             std::tuple<minecraft::varint, minecraft::varint> awk_block =
             {
                 minecraft::varint(0x05), std::get<7>(use_item_on)
@@ -836,8 +861,9 @@ void recv_thread()
             {
                 netlib::disconnect_server(current_fd, epfd);
                 auto current_user = users.find(current_fd)->second;
+                if (current_user.state == PLAY)
+                    system_chat(minecraft::string(std::format("{} disconnected", current_user.name)));
                 minecraft::uuid uuid = current_user.uuid;
-                system_chat(minecraft::string(std::format("{} disconnected", current_user.name)));
                 users.erase(current_fd);
                 
                 std::tuple<minecraft::varint, minecraft::varint, minecraft::varint> remove_entity = 
@@ -848,7 +874,6 @@ void recv_thread()
                 {
                     minecraft::varint(0x3D), minecraft::varint(1), uuid
                 };
-                system_chat(minecraft::string(std::format("{} disconnected", current_user.name)));
                 for (auto user: users)
                 {
                     if (user.second.state == PLAY)
@@ -904,7 +929,7 @@ int main()
     std::ifstream fs("blocks.json");
     blocks = json::parse(fs);
     fs.close();
-    int ticks_until_keep_alive = 200;
+    int ticks_until_keep_alive = 150;
     while (true)
     {   
         const auto before = clock::now();
@@ -935,12 +960,12 @@ int main()
                 if (user.second.state == PLAY)
                     send_packet(keep_alive, user.second.sockfd);
             }
-            ticks_until_keep_alive = 200;
+            ticks_until_keep_alive = 150;
         }
         else
             ticks_until_keep_alive--;
         const ms duration = clock::now() - before;
-        log("MSPT ", duration.count(), "ms");
+        //log("MSPT ", duration.count(), "ms");
         if (duration.count() > 50)
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         else

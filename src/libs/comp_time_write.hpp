@@ -248,8 +248,8 @@ struct write_var<minecraft::chunk>
                 {
                     value.sections[i].biome.bits_per_entry,minecraft::varint(value.sections[i].biome.palette.size()), 
                     value.sections[i].biome.palette,value.sections[i].biome.data_size,(char_size){.data = value.sections[i].biome.data.get(), 
-                    .consumed_size = value.sections[i].biome.data_size.num * 8,
-                        .max_size = value.sections[i].biome.data_size.num * 8 + 1, .start_data = value.sections[i].biome.data.get()}
+                    .consumed_size = (int)value.sections[i].biome.data_size.num * 8,
+                        .max_size = (int)value.sections[i].biome.data_size.num * 8 + 1, .start_data = value.sections[i].biome.data.get()}
                 };
                 constexpr std::size_t size = std::tuple_size_v<decltype(data)>;
                
