@@ -3,10 +3,11 @@
 #include <concepts>
 #include <cstring>
 #include <tuple>
+#include <bitset>
 #include "utils.hpp"
 #include "chunks.hpp"
 
-#define write_comp_pkt(size, ptr, t) const_for_<size>([&](auto i){write_var<std::tuple_element_t<i.value, decltype(t)>>::call(&ptr, std::get<i.value>(t));});
+#define write_comp_pkt(size, ptr, t) const_for<size>([&](auto i){write_var<std::tuple_element_t<i.value, decltype(t)>>::call(&ptr, std::get<i.value>(t));});
 
 struct char_size
 {
@@ -15,6 +16,17 @@ struct char_size
     int max_size = 1024;
     char *start_data;
 };
+
+template <typename Integer, Integer ...I, typename F> constexpr void const_for_each(std::integer_sequence<Integer, I...>, F&& func)
+{
+    (func(std::integral_constant<Integer, I>{}), ...);
+}
+
+template <auto N, typename F> constexpr void const_for(F&& func)
+{
+    if constexpr (N > 0)
+        const_for_each(std::make_integer_sequence<decltype(N), N>{}, std::forward<F>(func));
+}    
 
 template <typename T>
 void write_type(char *v, T value)
@@ -132,6 +144,30 @@ struct write_var<std::vector<T>>
             std::tuple<T> va = val;
             constexpr std::size_t size = std::tuple_size_v<decltype(va)>;
             write_comp_pkt(size, *v, va);
+        }
+    }
+};
+
+template<>
+struct write_var<minecraft::bitset>
+{
+    static void call(char_size *v, minecraft::bitset value)
+    {
+        while (v->consumed_size >= v->max_size || v->consumed_size + (value.size.num * 8) >= v->max_size)
+        {
+            v->start_data = (char *)realloc(v->start_data, v->max_size + 1024);
+            v->max_size += 1024;
+            v->data = v->start_data + v->consumed_size;
+        }
+        std::tuple<minecraft::varint> head = {value.size};
+        constexpr std::size_t size = std::tuple_size_v<decltype(head)>;
+        write_comp_pkt(size, *v, head);
+        for (auto val: value.bits)
+        {
+            unsigned long new_long = val.to_ulong();
+            std::tuple<unsigned long> long_enc = {new_long};
+            constexpr std::size_t size_ = std::tuple_size_v<decltype(long_enc)>;
+            write_comp_pkt(size_, *v, long_enc);
         }
     }
 };
@@ -316,16 +352,7 @@ struct write_var<minecraft::string_tag>
 };
 
 
-template <typename Integer, Integer ...I, typename F> constexpr void const_for_each(std::integer_sequence<Integer, I...>, F&& func)
-{
-    (func(std::integral_constant<Integer, I>{}), ...);
-}
 
-template <auto N, typename F> constexpr void const_for(F&& func)
-{
-    if constexpr (N > 0)
-        const_for_each(std::make_integer_sequence<decltype(N), N>{}, std::forward<F>(func));
-}    
 
 template<typename ...T>
 int send_packet(std::tuple<T...> packet, int sock)

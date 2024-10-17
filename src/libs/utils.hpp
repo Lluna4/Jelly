@@ -303,30 +303,11 @@ namespace minecraft
 		ReadUleb128(buf, &ret);
 		return varint(ret);
 	}
-
-	struct node_root
+	
+	struct bitset
 	{
-		char flag = 0x00;
-		varint children_num;
-		std::vector<varint> children_index;
-	};
-
-	struct node_literal
-	{
-		char flag = 0x01;
-		varint children_num;
-		std::vector<varint> children_index;
-		string name;
-	};
-
-	struct node_argument
-	{
-		char flag = 0x02;
-		varint children_num;
-		std::vector<varint> children_index;
-		string name;
-		varint parser_id;
-		varint varies;
+		varint size;
+		std::vector<std::bitset<64>> bits;
 	};
 }
 

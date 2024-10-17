@@ -248,6 +248,24 @@ void send_everyone_except_user(std::tuple<T...> packet, int id)
     }
 }
 
+template<typename ...T>
+void send_everyone_visible(std::tuple<T...> packet, int x, int y, int z)
+{
+    float chunk_pos_x = floor(x/16.0f);
+    float chunk_pos_z = floor(z/16.0f);
+    for (auto us: users)
+    {
+        if (us.second.state == PLAY)
+        {
+            if (us.second.chunk_pos.x + us.second.render_distance > (int)chunk_pos_x && us.second.chunk_pos.x - us.second.render_distance < (int)chunk_pos_x)
+            {
+                if (us.second.chunk_pos.z + us.second.render_distance > (int)chunk_pos_z && us.second.chunk_pos.z - us.second.render_distance < (int)chunk_pos_z)
+                    send_packet(packet, us.second.sockfd);
+            }
+        }
+    }
+}
+
 void send_chat(std::string message, std::string name)
 {
     std::tuple<minecraft::varint, minecraft::string_tag, minecraft::varint, minecraft::string_tag, bool> chat_message =
@@ -302,7 +320,7 @@ void place_block(std::int32_t x, std::int32_t y, std::int32_t z, int block_id)
     if (placed_chunk.sections[section].blocks.type == SINGLE_VALUED)
     {
         placed_chunk.sections[section].blocks = minecraft::paletted_container(8, true, 0, {minecraft::varint(9), minecraft::varint(0), minecraft::varint(block_id)});
-        placed_chunk.sections[section].blocks.data[(((rem_euclid(y, 16)))*256) + (abs(rem_euclid(z, 16))*16) + abs(rem_euclid(x, 16))] = 2;
+        placed_chunk.sections[section].blocks.data[(in_chunk_y*256) + (in_chunk_z*16) + in_chunk_x] = 2;
         placed_chunk.sections[section].block_count = 1;
         log("placed block");
     }
@@ -557,6 +575,7 @@ void execute_packet(packet pkt, User &user)
                 (user.angle.pitch/ 360) * 256, (user.angle.yaw/ 360) * 256,
                 (user.angle.yaw/ 360) * 256, minecraft::varint(0),0,0,0
             };
+			send_everyone_visible(spawn_entity_user, user.pos.x, user.pos.y, user.pos.z);
             system_chat(minecraft::string(std::format("{} connected", user.name)));
             for (auto us: users)
             {
@@ -712,20 +731,7 @@ void execute_packet(packet pkt, User &user)
                 {
                     minecraft::varint(0x09), (long long)((((x & (unsigned long)0x3FFFFFF) << 38) | ((z & (unsigned long)0x3FFFFFF) << 12) | (y & (unsigned long)0xFFF))), minecraft::varint(0)
                 };
-                float chunk_pos_x = floor(x/16.0f);
-                float chunk_pos_z = floor(z/16.0f);
-                for (auto us: users)
-                {
-                    
-                    if (us.second.state == PLAY)
-                    {
-                        if (us.second.chunk_pos.x + us.second.render_distance > (int)chunk_pos_x && us.second.chunk_pos.x - us.second.render_distance < (int)chunk_pos_x)
-                        {
-                            if (us.second.chunk_pos.z + us.second.render_distance > (int)chunk_pos_z && us.second.chunk_pos.z - us.second.render_distance < (int)chunk_pos_z)
-                                send_packet(update_block, us.second.sockfd);
-                        }
-                    }
-                }
+                send_everyone_visible(update_block, x, y, z);
                 std::tuple<minecraft::varint, minecraft::varint> awk_block =
                 {
                     minecraft::varint(0x05), std::get<3>(player_action)
@@ -814,21 +820,7 @@ void execute_packet(packet pkt, User &user)
             {
                 minecraft::varint(0x09), (long long)((((x & (unsigned long)0x3FFFFFF) << 38) | ((z & (unsigned long)0x3FFFFFF) << 12) | (y & (unsigned long)0xFFF))), minecraft::varint(user.inventory[user.selected_inv])
             };
-            float chunk_pos_x = floor(x/16.0f);
-            float chunk_pos_z = floor(z/16.0f);
-            
-            for (auto us: users)
-            {
-                
-                if (us.second.state == PLAY)
-                {
-                    if (us.second.chunk_pos.x + us.second.render_distance > (int)chunk_pos_x && us.second.chunk_pos.x - us.second.render_distance < (int)chunk_pos_x)
-                    {
-                        if (us.second.chunk_pos.z + us.second.render_distance > (int)chunk_pos_z && us.second.chunk_pos.z - us.second.render_distance < (int)chunk_pos_z)
-                            send_packet(update_block, us.second.sockfd);
-                    }
-                }
-            }
+            send_everyone_visible(update_block, x, y, z);
             
             std::tuple<minecraft::varint, minecraft::varint> awk_block =
             {
@@ -844,7 +836,7 @@ void recv_thread()
 {
     int events_ready = 0;
     epoll_event events[1024];
-    char *main_buffer = (char *)calloc(1024, sizeof(char));
+    char *main_buffer = (char *)calloc(4096, sizeof(char));
 
     while (true)
     {
@@ -883,7 +875,9 @@ void recv_thread()
                     }
                 }
             }
-            std::vector<packet> packets = process_packet(main_buffer, current_fd);
+
+            
+            std::vector<packet> packets = process_packet(main_buffer, current_fd, status);
             //log("read ", packets.size(), " packets");
             for (auto pack: packets)
             {
@@ -894,7 +888,7 @@ void recv_thread()
                 }
                 tick_packets.push_back(pack);
             }
-            memset(main_buffer, 0, 1024);
+            memset(main_buffer, 0, 4096);
         }
     }
 }

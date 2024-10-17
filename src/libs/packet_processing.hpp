@@ -16,7 +16,7 @@
 
 
 
-std::vector<packet> process_packet(char *pkt, int sock)
+std::vector<packet> process_packet(char *pkt, int sock, int status)
 {
 	int lenght = 0;
 	char *next = NULL;
@@ -28,6 +28,12 @@ std::vector<packet> process_packet(char *pkt, int sock)
 		return packets;
 	std::tuple<minecraft::varint, minecraft::varint> header;
 	header = read_packet(header, pkt);
+	if (std::get<0>(header).num > status && std::get<0>(header).num < 4096)
+	{
+		recv(sock, &pkt[status], std::get<0>(header).num - status, 0);
+	}
+	else if (std::get<0>(header).num > 4096)
+		return packets;
 	pkt += std::get<0>(header).size + std::get<1>(header).size;
 	p.data = mem_dup(pkt, std::get<0>(header).num);
 	p.id = std::get<1>(header).num;
