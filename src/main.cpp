@@ -24,7 +24,12 @@ using login_play = std::tuple<
                 unsigned char, char, bool, bool, bool, minecraft::varint, bool>;
 
 using chunk_data_light = std::tuple<minecraft::varint, int, int, char, char, minecraft::chunk,
-                                    minecraft::varint, char, char, char, char, minecraft::varint,
+                                    minecraft::varint, minecraft::varint,long, minecraft::varint, long, 
+                                    minecraft::varint, long, minecraft::varint, long, minecraft::varint, 
+                                    std::tuple<minecraft::varint, char_size>,
+                                    std::tuple<minecraft::varint, char_size>,
+                                    std::tuple<minecraft::varint, char_size>,
+                                    std::tuple<minecraft::varint, char_size>,
                                     minecraft::varint>;
 
 using json = nlohmann::json;
@@ -283,18 +288,53 @@ bool check_collision(position player, position block)
 		player.z - 0.3 < block.z + 1 && player.z + 0.3 > block.z);
 }
 
+void send_chunk(User user, int x, int z)
+{
+    minecraft::chunk chunk = find_chunk(x, z);
+    long sky_light_mask = 0;
+    std::bitset<64> b(sky_light_mask);
+    b[8] = 1;
+    b[9] = 1;
+    b[10] = 1;
+    b[11] = 1;
+    sky_light_mask = b.to_ulong();
+    std::cout << b << std::endl;
+    long block_light_mask = 0;
+    long empty_sky_light_mask = 0;
+    empty_sky_light_mask = flipBits(empty_sky_light_mask);
+    std::bitset<64> c(empty_sky_light_mask);
+    c[8] = 0;
+    c[9] = 0;
+    c[10] = 0;
+    c[11] = 0;
+    empty_sky_light_mask = c.to_ulong();
+    std::cout << c << std::endl;
+    long empty_block_light_mask = 0;
+    empty_block_light_mask = flipBits(empty_sky_light_mask);
+
+    char_size sky_data_1 = chunk.sections[7].light;
+    char_size sky_data_2 = chunk.sections[8].light;
+    char_size sky_data_3 = chunk.sections[9].light;
+    char_size sky_data_4 = chunk.sections[10].light;
+    chunk_data_light chunk_data = 
+    {
+        minecraft::varint(0x27), x, z, 0x0a, 0x0, chunk,
+        minecraft::varint(0), minecraft::varint(1), sky_light_mask, minecraft::varint(1), block_light_mask, 
+        minecraft::varint(1), empty_sky_light_mask, minecraft::varint(1), empty_block_light_mask, minecraft::varint(4),
+        {minecraft::varint(2048), sky_data_1},{minecraft::varint(2048), sky_data_2},
+        {minecraft::varint(2048), sky_data_3},{minecraft::varint(2048), sky_data_4},
+        minecraft::varint(0)
+    };
+    send_packet(chunk_data, user.sockfd); 
+}
+
 void send_world(User user, int x_, int z)
 {
     for (int y = (user.render_distance * -1) + z; y < (user.render_distance) + z; y++)
     {
         for (int x = (user.render_distance * -1) + x_; (x < user.render_distance) + x_; x++)
         {
-            minecraft::chunk chunk = find_chunk(x, y);
-            chunk_data_light chunk_data = {
-                minecraft::varint(0x27), x, y, 0x0a, 0x0, chunk, 
-                minecraft::varint(0),0, 0, 0, 0, minecraft::varint(0), minecraft::varint(0)
-            };
-            send_packet(chunk_data, user.sockfd);		
+            send_chunk(user, x, y);
         }
     }
 }
@@ -349,8 +389,12 @@ void place_block(std::int32_t x, std::int32_t y, std::int32_t z, int block_id)
         }
     }
     chunks.find({chunk_pos_x, chunk_pos_z})->second = placed_chunk;
+    free(placed_chunk.sections[section].light.start_data);
+    placed_chunk.sections[section].light = minecraft::calc_light(placed_chunk.sections[section].blocks);
     log(std::format("Placed a block in chunk {}, {}, section {} in x {} y {} z {}", chunk_pos_x, chunk_pos_z, (y + 64)/16 ,rem_euclid(x, 16), rem_euclid(y, 16), rem_euclid(z, 16)));
 }
+
+
 
 void update_visible_chunks()
 {
@@ -377,12 +421,7 @@ void update_visible_chunks()
                 int z = (curr_pos.z + user.second.render_distance) - 1;
                 for (int x = (user.second.render_distance * -1) + curr_pos.x; x < user.second.render_distance + curr_pos.x; x++)
                 {
-                    minecraft::chunk chunk = find_chunk(x, z);
-                    chunk_data_light chunk_data = {
-                        minecraft::varint(0x27), x, z, 0x0a, 0x0, chunk, 
-                        minecraft::varint(0),0, 0, 0, 0, minecraft::varint(0), minecraft::varint(0)
-                    };
-                    send_packet(chunk_data, user.second.sockfd);		
+                    send_chunk(user.second, x, z);
                 }
                 users.find(user.second.sockfd)->second.chunk_pos = curr_pos;
             }
@@ -396,12 +435,7 @@ void update_visible_chunks()
                 int z = (curr_pos.z - user.second.render_distance) + 1;
                 for (int x = (user.second.render_distance * -1) + curr_pos.x; x < user.second.render_distance + curr_pos.x; x++)
                 {
-                    minecraft::chunk chunk = find_chunk(x, z);
-                    chunk_data_light chunk_data = {
-                        minecraft::varint(0x27), x, z, 0x0a, 0x0, chunk, 
-                        minecraft::varint(0),0, 0, 0, 0, minecraft::varint(0), minecraft::varint(0)
-                    };
-                    send_packet(chunk_data, user.second.sockfd);		
+                    send_chunk(user.second, x, z);		
                 }
                 users.find(user.second.sockfd)->second.chunk_pos = curr_pos;
             }
@@ -415,12 +449,7 @@ void update_visible_chunks()
                 int x = (curr_pos.x + user.second.render_distance) - 1;
                 for (int z = (user.second.render_distance * -1) + curr_pos.z; z < user.second.render_distance + curr_pos.z; z++)
                 {
-                    minecraft::chunk chunk = find_chunk(x, z);
-                    chunk_data_light chunk_data = {
-                        minecraft::varint(0x27), x, z, 0x0a, 0x0, chunk, 
-                        minecraft::varint(0),0, 0, 0, 0, minecraft::varint(0), minecraft::varint(0)
-                    };
-                    send_packet(chunk_data, user.second.sockfd);		
+                    send_chunk(user.second, x, z);		
                 }
                 users.find(user.second.sockfd)->second.chunk_pos = curr_pos;
             }
@@ -434,12 +463,7 @@ void update_visible_chunks()
                 int x = (curr_pos.x - user.second.render_distance) + 1;
                 for (int z = (user.second.render_distance * -1) + curr_pos.z; z < user.second.render_distance + curr_pos.z; z++)
                 {
-                    minecraft::chunk chunk = find_chunk(x, z);
-                    chunk_data_light chunk_data = {
-                        minecraft::varint(0x27), x, z, 0x0a, 0x0, chunk, 
-                        minecraft::varint(0),0, 0, 0, 0, minecraft::varint(0), minecraft::varint(0)
-                    };
-                    send_packet(chunk_data, user.second.sockfd);		
+                    send_chunk(user.second, x, z);	
                 }
                 users.find(user.second.sockfd)->second.chunk_pos = curr_pos;
             }
@@ -518,6 +542,11 @@ void execute_packet(packet pkt, User &user)
                 minecraft::varint(0x0E), minecraft::varint(1),
                 minecraft::string("minecraft"), minecraft::string("core"), minecraft::string("1.21")
             };
+            std::tuple<minecraft::varint, minecraft::string, minecraft::string> brand =
+            {
+                minecraft::varint(0x01), minecraft::string("minecraft:brand"), minecraft::string("Jelly")
+            };
+            send_packet(brand, user.sockfd);
             send_packet(known_packs, user.sockfd);
             registry_data(user);
             std::tuple<minecraft::varint> end_config = {minecraft::varint(0x03)};
@@ -620,13 +649,14 @@ void execute_packet(packet pkt, User &user)
                 minecraft::varint(0x22), 13, 0.0f
             };
             send_packet(game_event, user.sockfd);
-            minecraft::chunk chunk = find_chunk(0, 0);
-            chunk_data_light chunk_data = {
-                    minecraft::varint(0x27), 0, 0, 0x0a, 0x0, chunk,
-                    minecraft::varint(0),0, 0, 0, 0, minecraft::varint(0), minecraft::varint(0)
-                };
-            send_packet(chunk_data, user.sockfd);
+            std::tuple<minecraft::varint, float, bool> tick_state =
+            {
+                minecraft::varint(0x71), 20.0f, false
+            };
+            send_packet(tick_state, user.sockfd);
+            send_chunk(user, 0, 0);
             send_world(user, 0, 0);
+            
         }
     }
     if (user.state == PLAY)
@@ -837,6 +867,7 @@ void recv_thread()
     int events_ready = 0;
     epoll_event events[1024];
     char *main_buffer = (char *)calloc(4096, sizeof(char));
+    char_size buff = {.data = main_buffer, .consumed_size = 0, .max_size = 4096, .start_data = main_buffer};
 
     while (true)
     {
@@ -847,7 +878,8 @@ void recv_thread()
         for (int i = 0; i < events_ready;i++)
         {
             int current_fd = events[i].data.fd;
-            int status = recv(current_fd, main_buffer, 1024, 0);
+            int status = recv(current_fd, buff.data, 1024, 0);
+            buff.data += status;
             //log("status: ", status);
             if (status == -1 || status == 0)
             {
@@ -877,7 +909,7 @@ void recv_thread()
             }
 
             
-            std::vector<packet> packets = process_packet(main_buffer, current_fd, status);
+            std::vector<packet> packets = process_packet(&buff, current_fd, status);
             //log("read ", packets.size(), " packets");
             for (auto pack: packets)
             {
@@ -888,7 +920,8 @@ void recv_thread()
                 }
                 tick_packets.push_back(pack);
             }
-            memset(main_buffer, 0, 4096);
+            memset(buff.start_data, 0, 4096);
+            buff.data = buff.start_data;
         }
     }
 }
@@ -903,6 +936,12 @@ int main()
         log_err("server init failed!");
         return -1;
     }
+	if (std::filesystem::exists("logs") == false)
+	{
+		std::filesystem::create_directory("logs");
+		log("Created logging folder!");
+	}
+	generate_file_name();
     epfd = epoll_create1(0);
     log("epfd is ", epfd);
     std::thread accept_t(accept_th, sock);
@@ -923,7 +962,7 @@ int main()
     std::ifstream fs("blocks.json");
     blocks = json::parse(fs);
     fs.close();
-    int ticks_until_keep_alive = 150;
+    int ticks_until_keep_alive = 200;
     while (true)
     {   
         const auto before = clock::now();
@@ -954,12 +993,12 @@ int main()
                 if (user.second.state == PLAY)
                     send_packet(keep_alive, user.second.sockfd);
             }
-            ticks_until_keep_alive = 150;
+            ticks_until_keep_alive = 200;
         }
         else
             ticks_until_keep_alive--;
         const ms duration = clock::now() - before;
-        //log("MSPT ", duration.count(), "ms");
+        log("MSPT ", duration.count(), "ms");
         if (duration.count() > 50)
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         else

@@ -21,11 +21,25 @@ struct packet
 	int sock;
 };
 
+struct char_size
+{
+    char *data;
+    int consumed_size;
+    int max_size = 1024;
+    char *start_data;
+
+};
+
 struct pkt
 {
 	char *data;
 	int fd;
 };
+
+int flipBits(int n) 
+{
+    return ~n;
+}
 
 std::size_t ReadUleb128(const char* addr, unsigned long* ret)
 {
@@ -89,10 +103,6 @@ std::size_t WriteSleb128(std::string &dest, long val)
 
   return count;
 }
-
-
-
-
 
 inline unsigned encodeSLEB128(int64_t Value, char *p, unsigned PadTo = 0) {
   char *orig_p = p;
@@ -309,6 +319,8 @@ namespace minecraft
 		varint size;
 		std::vector<std::bitset<64>> bits;
 	};
+
+	
 }
 
 void send_varint(int fd, unsigned long val)

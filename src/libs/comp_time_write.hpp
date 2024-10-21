@@ -9,13 +9,6 @@
 
 #define write_comp_pkt(size, ptr, t) const_for<size>([&](auto i){write_var<std::tuple_element_t<i.value, decltype(t)>>::call(&ptr, std::get<i.value>(t));});
 
-struct char_size
-{
-    char *data;
-    int consumed_size;
-    int max_size = 1024;
-    char *start_data;
-};
 
 template <typename Integer, Integer ...I, typename F> constexpr void const_for_each(std::integer_sequence<Integer, I...>, F&& func)
 {
@@ -81,6 +74,7 @@ struct write_var
         {
             v->start_data = (char *)realloc(v->start_data, v->max_size + 1024);
             v->max_size += 1024;
+            v->data = v->start_data + v->consumed_size;
         }
         write_type<T>(v->data, value);
         v->data += sizeof(T);
@@ -99,6 +93,23 @@ struct write_var<std::tuple<T...>>
 };
 
 template<>
+struct write_var<std::string>
+{
+    static void call(char_size *v, std::string value)
+    {
+        while (v->consumed_size >= v->max_size || v->consumed_size + value.size() >= v->max_size)
+        {
+            v->start_data = (char *)realloc(v->start_data, v->max_size + 1024);
+            v->max_size += 1024;
+            v->data = v->start_data + v->consumed_size;
+        }
+        memcpy(v->data, value.c_str(), value.size());
+        v->data += value.size();
+        v->consumed_size += value.size();
+    }
+};
+
+template<>
 struct write_var<minecraft::varint>
 {
     static void call(char_size *v, minecraft::varint value)
@@ -107,6 +118,7 @@ struct write_var<minecraft::varint>
         {
             v->start_data = (char *)realloc(v->start_data, v->max_size + 1024);
             v->max_size += 1024;
+            v->data = v->start_data + v->consumed_size;
         }
         std::string dest;
         size_t size = WriteUleb128(dest, value.num);
@@ -372,7 +384,6 @@ int send_packet(std::tuple<T...> packet, int sock)
 
     int ret = send(sock, final_buffer, buff.consumed_size + size_, 0);
     std::println("Sent {}B", ret);
-    free(buff.start_data);
     free(final_buffer);
     
     return ret;
