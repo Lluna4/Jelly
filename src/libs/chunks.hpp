@@ -153,6 +153,7 @@ namespace minecraft
 		}
 		char_size ret = {.data = mem_dup(encoded_val, 2048), .consumed_size = 2048, .max_size = 2048, .start_data = nullptr};
 		ret.start_data = ret.data;
+		free(encoded_val);
 		return ret;
 	}
 
@@ -226,7 +227,21 @@ minecraft::chunk find_chunk(int x, int z)
 {
 	if (chunks.find({x, z}) == chunks.end()) //if it doesnt find a chunk it generates one
 	{
-		chunks.insert({{x, z}, minecraft::chunk(x, z)});
+ 	 	chunks.emplace(std::piecewise_construct,
+                    std::forward_as_tuple(x, z),
+                    std::forward_as_tuple(x, z));
 	}
 	return chunks[{x, z}];
+}
+
+void free_chunks()
+{
+	for (auto chunk: chunks)
+	{
+		auto a = chunk.second.sections;
+		for (int i = 0; i < a.size();i++)
+		{
+			free((a[i].light).data);
+		}
+	}
 }

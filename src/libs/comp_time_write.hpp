@@ -385,6 +385,7 @@ int send_packet(std::tuple<T...> packet, int sock)
     int ret = send(sock, final_buffer, buff.consumed_size + size_, 0);
     std::println("Sent {}B", ret);
     free(final_buffer);
+    free(buff.start_data);
     
     return ret;
 }

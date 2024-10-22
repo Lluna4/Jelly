@@ -27,7 +27,6 @@ struct char_size
     int consumed_size;
     int max_size = 1024;
     char *start_data;
-
 };
 
 struct pkt
