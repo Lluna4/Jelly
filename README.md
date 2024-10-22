@@ -1,5 +1,5 @@
 # Jelly
-A simple 1.20.4 minecraft server made in c++23(using some c++26 features) thats in development!
+A simple 1.21/1.21.1 minecraft server made in c++23(using some c++26 features) thats in development!
 ## Build
 To build the project you have to simply enter the build directory `cd build` configure cmake `cmake ..` and then build the project `cmake --build .`, the project has dependencies with [nlohmann/json](https://github.com/nlohmann/json) so please put nlohmann_json in the same directory as the project
 ## Features
