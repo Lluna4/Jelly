@@ -12,11 +12,11 @@
 #include "libs/comp_time_write.hpp"
 #include "libs/comp_time_read.hpp"
 #include "libs/chunks.hpp"
+#include "libs/tokenize.hpp"
 
 int epfd;
 
 std::vector<packet> tick_packets;
-unsigned long id = 9;
 using login_play = std::tuple<
                 minecraft::varint, int, bool, minecraft::varint, minecraft::string, minecraft::varint,
                 minecraft::varint, minecraft::varint, bool, bool, bool,
@@ -99,6 +99,50 @@ class User
         int sockfd;
         bool overwhelmed;
         std::vector<unsigned long> inventory;
+        void to_file()
+        {
+            int fd = open(std::format("{}.dat", name).c_str(), O_WRONLY | O_CREAT);
+            if (fd == -1)
+            {
+                std::print("Couldnt save user in file");
+                return;
+            }
+            auto user_data = std::make_tuple(selected_inv, state, render_distance, uuid, minecraft::string(name), 
+                minecraft::string(pronouns),
+                minecraft::string(locale), pos.x, pos.y, pos.z, chunk_pos.x, chunk_pos.z, angle.pitch, angle.yaw, on_ground, sneaking,
+                overwhelmed, inventory);
+            write_to_file(user_data, fd);
+            close(fd);
+        }
+        void from_file(std::string file_name)
+        {
+            int fd = open(file_name.c_str(), O_RDONLY);
+            if (fd == -1)
+            {
+                std::print("Couldnt load user from file");
+                return;
+            }
+            char *buf = (char *)calloc(1024, sizeof(char));
+            std::tuple<int, int, int, minecraft::uuid, minecraft::string, minecraft::string, minecraft::string, double, double, double, int, int, float, float, bool, bool, bool> data;
+            read(fd, buf, 1024);
+            data = read_packet(data, buf);
+            selected_inv = std::get<0>(data);
+            render_distance = std::get<2>(data);
+            pronouns = std::get<5>(data).str;
+            locale = std::get<6>(data).str;
+            pos.x = std::get<7>(data);
+            pos.y = std::get<8>(data);
+            pos.z = std::get<9>(data);
+            chunk_pos.x = std::get<10>(data);
+            chunk_pos.z = std::get<11>(data);
+            angle.pitch = std::get<12>(data);
+            angle.yaw = std::get<12>(data);
+            on_ground = std::get<13>(data);
+            sneaking = std::get<14>(data);
+            overwhelmed = std::get<15>(data);
+            close(fd);
+            free(buf);
+        }
 };
 std::map<int, User> users;
 
@@ -254,6 +298,18 @@ void send_everyone_except_user(std::tuple<T...> packet, int id)
 }
 
 template<typename ...T>
+void send_everyone_except_overwhelmed(std::tuple<T...> packet)
+{
+    for (auto us: users)
+    {
+        if (us.second.state == PLAY && us.second.overwhelmed == false)
+        {
+            send_packet(packet, us.second.sockfd);
+        }
+    }
+}
+
+template<typename ...T>
 void send_everyone_visible(std::tuple<T...> packet, int x, int y, int z)
 {
     float chunk_pos_x = floor(x/16.0f);
@@ -389,7 +445,6 @@ void place_block(std::int32_t x, std::int32_t y, std::int32_t z, int block_id)
         }
     }
     chunks.find({chunk_pos_x, chunk_pos_z})->second = placed_chunk;
-    free(placed_chunk.sections[section].light.start_data);
     placed_chunk.sections[section].light = minecraft::calc_light(placed_chunk.sections[section].blocks);
     log(std::format("Placed a block in chunk {}, {}, section {} in x {} y {} z {}", chunk_pos_x, chunk_pos_z, (y + 64)/16 ,rem_euclid(x, 16), rem_euclid(y, 16), rem_euclid(z, 16)));
 }
@@ -498,9 +553,7 @@ void execute_packet(packet pkt, User &user)
 
             std::tuple<long> ping;
             ping = read_packet(ping, pkt.data);
-            
-            std::tuple<minecraft::varint, long> ping_repl = {minecraft::varint(1), std::get<0>(ping)};
-            send_packet(ping_repl, user.sockfd);
+            send_packet(std::make_tuple(minecraft::varint(1), std::get<0>(ping)), user.sockfd);
         }
     }
     if (user.state == LOGIN)
@@ -512,11 +565,8 @@ void execute_packet(packet pkt, User &user)
             user.name = std::get<0>(login_start).str;
             user.uuid.generate(user.name);
 
-            std::tuple<minecraft::varint, minecraft::uuid, minecraft::string, minecraft::varint, unsigned char> login_succ =
-                {
-                    minecraft::varint(0x02), user.uuid, minecraft::string(user.name), 
-                    minecraft::varint(0x00),(unsigned char)true
-                };
+            auto login_succ = std::make_tuple(minecraft::varint(0x02), user.uuid, minecraft::string(user.name), 
+                    minecraft::varint(0x00),(unsigned char)true);
             send_packet(login_succ, user.sockfd);
         }
         if (pkt.id == 0x3)
@@ -538,14 +588,9 @@ void execute_packet(packet pkt, User &user)
             user.locale = std::get<0>(client_information).str;
             user.render_distance = (int)std::get<1>(client_information);
 
-            std::tuple<minecraft::varint, minecraft::varint, minecraft::string, minecraft::string, minecraft::string> known_packs = {
-                minecraft::varint(0x0E), minecraft::varint(1),
-                minecraft::string("minecraft"), minecraft::string("core"), minecraft::string("1.21")
-            };
-            std::tuple<minecraft::varint, minecraft::string, minecraft::string> brand =
-            {
-                minecraft::varint(0x01), minecraft::string("minecraft:brand"), minecraft::string("Jelly")
-            };
+            auto known_packs = std::make_tuple(minecraft::varint(0x0E), minecraft::varint(1),
+                minecraft::string("minecraft"), minecraft::string("core"), minecraft::string("1.21"));
+            auto brand = std::make_tuple(minecraft::varint(0x01), minecraft::string("minecraft:brand"), minecraft::string("Jelly"));
             send_packet(brand, user.sockfd);
             send_packet(known_packs, user.sockfd);
             registry_data(user);
@@ -555,6 +600,8 @@ void execute_packet(packet pkt, User &user)
         if (pkt.id == 0x03)
         {
             user.state = PLAY;
+            if (std::filesystem::exists(std::format("{}.dat", user.name)))
+                user.from_file(std::format("{}.dat", user.name));
             login_play login = 
             {
                 minecraft::varint(0x2B), user.sockfd, false, minecraft::varint(1), 
@@ -566,18 +613,12 @@ void execute_packet(packet pkt, User &user)
             };
             send_packet(login, user.sockfd);
 
-            std::tuple<minecraft::varint, minecraft::varint, 
-                std::tuple<char, minecraft::varint, minecraft::varint, minecraft::varint>,
-                std::tuple<char, minecraft::varint, minecraft::varint, minecraft::string>,
-                std::tuple<char, minecraft::varint, minecraft::string, minecraft::varint, minecraft::varint>,
-                minecraft::varint> commands =
-                {
-                    minecraft::varint(0x11), minecraft::varint(3),
-                    {0x00, minecraft::varint(2), minecraft::varint(1), minecraft::varint(2)},
-                    {0x01, minecraft::varint(1), minecraft::varint(2), minecraft::string("pronouns")},
-                    {0x02, minecraft::varint(0), minecraft::string("pronouns"), minecraft::varint(5), minecraft::varint(2)},
-                    minecraft::varint(0)
-                };
+            auto commands = std::make_tuple(minecraft::varint(0x11), minecraft::varint(4),
+                    std::make_tuple((char)0x00, minecraft::varint(3), minecraft::varint(1), minecraft::varint(2), minecraft::varint(3)),
+                    std::make_tuple((char)0x01, minecraft::varint(1), minecraft::varint(2), minecraft::string("pronouns")),
+                    std::make_tuple((char)0x02, minecraft::varint(0), minecraft::string("pronouns"), minecraft::varint(5), minecraft::varint(2)),
+                    std::make_tuple((char)0x01, minecraft::varint(0), minecraft::string("overwhelmed")),
+                    minecraft::varint(0));
 
             send_packet(commands, user.sockfd);
             std::tuple<minecraft::varint, double, double, double, float, float, char, minecraft::varint> sync_pos =
@@ -680,6 +721,34 @@ void execute_packet(packet pkt, User &user)
                             minecraft::string_tag(user_name)
                         };
                 send_everyone(info_update_head_user);
+                if (user.locale.compare("en_us") == 0 || user.locale.compare("en_uk") == 0)
+                	system_chat(std::format("Your pronouns have changed to {}", command_contents));
+                else if (user.locale.compare("es_es") == 0)
+                    system_chat(std::format("Tus pronombres han cambiado a {}", command_contents));
+                else if (user.locale.compare("ca_es") == 0)
+                    system_chat(std::format("Els teus pronoms han canviat a {}", command_contents));
+            }
+            if (commands.starts_with("overwhelmed"))
+            {
+                user.overwhelmed = true;
+                if (user.pronouns.contains("/") == true)
+                {
+                    std::vector<std::string> res = tokenize(user.pronouns, '/');
+                    if (res.size() > 0)
+                    {
+                        if (res[0].compare("they") == 0)
+                            res[0] = "them";
+                        else if (res[0].compare("she") == 0)
+                            res[0] = "her";
+                        else if (res[0].compare("he") == 0)
+                            res[0] = "him";
+                        send_chat(std::format("{} is overwhelmed and will not see the chat, please keep interaction with {} as low as possible", user.name, res[0]), "SERVER [it/its]");
+                    }
+                    else
+                        send_chat(std::format("{} is overwhelmed and will not see the chat, please keep interaction with them as low as possible", user.name), "SERVER [it/its]");
+                }
+                else
+                    send_chat(std::format("{} is overwhelmed and will not see the chat, please keep interaction with them as low as possible", user.name), "SERVER [it/its]");
             }
         }
         else if (pkt.id == 0x06)
@@ -886,7 +955,10 @@ void recv_thread()
                 netlib::disconnect_server(current_fd, epfd);
                 auto current_user = users.find(current_fd)->second;
                 if (current_user.state == PLAY)
+                {
                     system_chat(minecraft::string(std::format("{} disconnected", current_user.name)));
+                    current_user.to_file();
+                }
                 minecraft::uuid uuid = current_user.uuid;
                 users.erase(current_fd);
                 

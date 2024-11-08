@@ -86,6 +86,18 @@ struct read_var<minecraft::string>
     }
 };
 
+template<>
+struct read_var<minecraft::uuid>
+{
+    static minecraft::uuid call(char **v)
+    {
+        minecraft::uuid ret; 
+        ret.generate("Not implemented");
+        *v += 16;
+        return ret;
+    }
+};
+
 template<typename ...T>
 struct read_var<std::tuple<T...>>
 {

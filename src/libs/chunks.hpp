@@ -199,7 +199,9 @@ namespace minecraft
 		{
 			for (int i = 0; i < 24; i++)
 			{
-				if (i < surface)
+				if (i < surface - 1)
+					sections.emplace_back(true, false, palette);
+				else if (i == surface - 1)
 					sections.emplace_back(true, true, palette);
 				else
 					sections.emplace_back(false, true, palette);
