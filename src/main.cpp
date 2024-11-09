@@ -82,6 +82,7 @@ class User
             inventory.resize(46);
             overwhelmed = false;
             chunk_pos = {0, 0};
+            loading = false;
         }
         int selected_inv;
         int state;
@@ -98,6 +99,7 @@ class User
         bool sneaking;
         int sockfd;
         bool overwhelmed;
+        bool loading;
         std::vector<unsigned long> inventory;
         void to_file()
         {
@@ -178,7 +180,8 @@ void status_response(User user)
 		}},
 		{"description", {
 			{"text", "Hiiiii!"}
-		}}
+		}},
+        {"favicon", base64}
 	};
 	response_str = response.dump();
 	std::cout << response_str << std::endl;
@@ -384,15 +387,25 @@ void send_chunk(User user, int x, int z)
     send_packet(chunk_data, user.sockfd); 
 }
 
-void send_world(User user, int x_, int z)
+void send_world(User &user)
 {
-    for (int y = (user.render_distance * -1) + z; y < (user.render_distance) + z; y++)
+    user.loading = true;
+    int z = user.chunk_pos.z;
+    int x_ = user.chunk_pos.x;
+    log(std::format("Chunk pos {}, {}", z, x_));
+    std::tuple<minecraft::varint, minecraft::varint, minecraft::varint> set_center_chunk =
     {
-        for (int x = (user.render_distance * -1) + x_; (x < user.render_distance) + x_; x++)
+        minecraft::varint(0x54), minecraft::varint((unsigned long)(*(unsigned int *)&x_)), minecraft::varint((unsigned long)(*(unsigned int *)&z))
+    };
+    send_packet(set_center_chunk, user.sockfd);
+    for (int y = z - user.render_distance; y <= z + user.render_distance; y++)
+    {
+        for (int x = x_ - user.render_distance; x <= x_ + user.render_distance; x++)
         {
             send_chunk(user, x, y);
         }
     }
+    user.loading = false;
 }
 
 void system_chat(minecraft::string message)
@@ -695,9 +708,9 @@ void execute_packet(packet pkt, User &user)
                 minecraft::varint(0x71), 20.0f, false
             };
             send_packet(tick_state, user.sockfd);
-            send_chunk(user, 0, 0);
-            send_world(user, 0, 0);
-            
+            send_chunk(user, user.chunk_pos.x, user.chunk_pos.z);
+            std::thread send_world_th(send_world, std::ref(user));
+            send_world_th.detach();   
         }
     }
     if (user.state == PLAY)
@@ -1038,16 +1051,23 @@ int main()
     while (true)
     {   
         const auto before = clock::now();
-        for (auto pack: tick_packets)
+        for (int i = 0; i < tick_packets.size();i++)
         {
+            packet pack = tick_packets[i];
             log(std::format("Got a packet with id {} and size {}", pack.id, pack.size));
             auto user_ = users.find(pack.sock);
             if (user_ == users.end())
                 continue;
+            if (user_->second.loading == true)
+            {
+                log("Packet skipped");
+                continue;
+            }
             execute_packet(pack, user_->second);
             free(pack.start_data);
+            tick_packets.erase(tick_packets.begin() + i);
         }
-        tick_packets.clear();
+        //tick_packets.clear();
         for (auto user: users)
         {
             update_players_position(user.second);

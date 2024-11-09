@@ -19,6 +19,15 @@ struct packet
 	char *data;
 	char *start_data;
 	int sock;
+	bool operator==(const packet& other) const 
+	{
+		if (id == other.id && size == other.size && buf_size == other.buf_size && sock == other.sock)
+		{
+			if (memcmp(start_data, other.start_data, buf_size) == 0)
+				return true;
+		}
+		return false;
+	}
 };
 
 struct char_size
