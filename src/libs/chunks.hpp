@@ -10,7 +10,7 @@ enum palette_type
 	INDIRECT,
 	DIRECT
 };
-
+bool LIGHT_POSTPROCESSING = true;
 namespace minecraft
 {
 	struct paletted_container
@@ -98,7 +98,6 @@ namespace minecraft
 				}
 			}
 		}
-
 		for (int z = 0; z < 16;z++)
 		{
 			for (int x = 0; x < 16; x++)

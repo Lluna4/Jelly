@@ -17,7 +17,7 @@ find_package(OpenSSL REQUIRED)
 add_compile_options(-std=c++23)
 
 # Define the executable
-add_executable(jelly src/main.cpp)
+add_executable(jelly src/main.cpp src/libs/netlib.cpp)
 
 # Link the third-party library to the executable
 target_link_libraries(jelly PRIVATE nlohmann_json::nlohmann_json)

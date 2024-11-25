@@ -128,7 +128,6 @@ class User
             std::tuple<int, int, int, minecraft::uuid, minecraft::string, minecraft::string, minecraft::string, double, double, double, int, int, float, float, bool, bool, bool> data;
             read(fd, buf, 1024);
             data = read_packet(data, buf);
-            selected_inv = std::get<0>(data);
             render_distance = std::get<2>(data);
             pronouns = std::get<5>(data).str;
             locale = std::get<6>(data).str;
@@ -159,6 +158,10 @@ void accept_th(int sock)
         netlib::add_to_list(new_client, epfd);
         struct in_addr ipAddr = addr.sin_addr;
         std::println("{} connected", inet_ntop(AF_INET, &ipAddr, str, INET_ADDRSTRLEN));
+        if (users.find(new_client) != users.end())
+        {
+            users.erase(new_client);
+        }
         users.emplace(new_client, User(new_client));
     }
 }
@@ -459,7 +462,7 @@ void place_block(std::int32_t x, std::int32_t y, std::int32_t z, int block_id)
     }
     chunks.find({chunk_pos_x, chunk_pos_z})->second = placed_chunk;
     placed_chunk.sections[section].light = minecraft::calc_light(placed_chunk.sections[section].blocks);
-    log(std::format("Placed a block in chunk {}, {}, section {} in x {} y {} z {}", chunk_pos_x, chunk_pos_z, (y + 64)/16 ,rem_euclid(x, 16), rem_euclid(y, 16), rem_euclid(z, 16)));
+    log(std::format("Placed {} in chunk {}, {}, section {} in x {} y {} z {}",block_id ,chunk_pos_x, chunk_pos_z, (y + 64)/16 ,rem_euclid(x, 16), rem_euclid(y, 16), rem_euclid(z, 16)));
 }
 
 
@@ -913,11 +916,13 @@ void execute_packet(packet pkt, User &user)
                 if (us.second.state == PLAY)
                 {
                     if (check_collision(us.second.pos, (position){.x = (double)x, .y = (double)y, .z = (double)z}) == true)
+                    {
+                        log("Block collides with player!");
 		                return;
+                    }
                 }
             }
-    	    if (check_collision(user.pos, (position){.x = (double)x, .y = (double)y, .z = (double)z}) == true)
-		    return;
+            log(std::format("Placed block {} in position {}",user.inventory[user.selected_inv], user.selected_inv));
             place_block(x, y, z, user.inventory[user.selected_inv]);
             unsigned char anim = 0;
             if (std::get<0>(use_item_on).num == 1)
@@ -1011,8 +1016,13 @@ void recv_thread()
     }
 }
 
-int main()
+int main(int argc, char *argv[])
 {
+    if (argc > 1)
+    {
+        if (strcmp(argv[1], "-no_light_postprocessing") == 0)
+            LIGHT_POSTPROCESSING = false;
+    }
     using clock = std::chrono::system_clock;
     using ms = std::chrono::duration<double, std::milli>;
     int sock = netlib::init_server("0.0.0.0", 25565);
@@ -1080,11 +1090,7 @@ int main()
         if (ticks_until_keep_alive == 0)
         {
             std::tuple<minecraft::varint, long> keep_alive = {minecraft::varint(0x26), 12324};
-            for (auto user: users)
-            {
-                if (user.second.state == PLAY)
-                    send_packet(keep_alive, user.second.sockfd);
-            }
+            send_everyone(keep_alive);
             ticks_until_keep_alive = 200;
         }
         else
