@@ -61,6 +61,15 @@ struct angles
     float yaw, pitch;
 };
 
+struct message_locale
+{
+    message_locale(std::map<std::string, std::string> messages_, std::string def)
+    :messages(messages_), default_message(def)
+    {}
+    std::map<std::string, std::string> messages;
+    std::string default_message;
+};
+
 class User
 {
     public:
@@ -130,7 +139,7 @@ class User
             data = read_packet(data, buf);
             render_distance = std::get<2>(data);
             pronouns = std::get<5>(data).str;
-            locale = std::get<6>(data).str;
+            //locale = std::get<6>(data).str;
             pos.x = std::get<7>(data);
             pos.y = std::get<8>(data);
             pos.z = std::get<9>(data);
@@ -420,6 +429,33 @@ void system_chat(minecraft::string message)
     send_everyone(system_chat);
 }
 
+void system_chat(message_locale msg)
+{
+    for (auto user: users)
+    {
+        auto locale_msg = msg.messages.find(user.second.locale);
+        if (locale_msg == msg.messages.end())
+        {
+            log("Couldnt find message for locale ", user.second.locale);
+            std::tuple<minecraft::varint, minecraft::string_tag, bool> system_chat = 
+            {
+                minecraft::varint(0x6C), minecraft::string_tag(msg.default_message), false
+            };
+            send_packet(system_chat, user.second.sockfd);
+        }
+        else
+        {
+            log("Found message for locale ", user.second.locale);
+            std::tuple<minecraft::varint, minecraft::string_tag, bool> system_chat = 
+            {
+                minecraft::varint(0x6C), minecraft::string_tag(locale_msg->second), false
+            };
+            send_packet(system_chat, user.second.sockfd);
+        }
+    }
+
+}
+
 void place_block(std::int32_t x, std::int32_t y, std::int32_t z, int block_id)
 {
     float chunk_pos_x = floor(x/16.0f);
@@ -662,7 +698,11 @@ void execute_packet(packet pkt, User &user)
                 (user.angle.yaw/ 360) * 256, minecraft::varint(0),0,0,0
             };
 			send_everyone_visible(spawn_entity_user, user.pos.x, user.pos.y, user.pos.z);
-            system_chat(minecraft::string(std::format("{} connected", user.name)));
+            message_locale conn_msg({{"en_us", std::format("{} connected", user.name)},
+                                     {"en_uk", std::format("{} connected", user.name)},
+                                     {"es_es", std::format("{} se conectó", user.name)},
+                                     {"ca_es", std::format("{} s'ha connectat", user.name)}}, std::format("{} connected", user.name));
+            system_chat(conn_msg);
             for (auto us: users)
             {
                 if (us.second.state == PLAY)
@@ -1096,7 +1136,7 @@ int main(int argc, char *argv[])
         else
             ticks_until_keep_alive--;
         const ms duration = clock::now() - before;
-        log("MSPT ", duration.count(), "ms");
+        //log("MSPT ", duration.count(), "ms");
         if (duration.count() > 50)
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         else
