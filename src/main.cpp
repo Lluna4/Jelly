@@ -61,6 +61,100 @@ struct angles
     float yaw, pitch;
 };
 
+std::map<std::string, std::string> languages = {
+    {"af", "afrikaans"},
+    {"ar", "arabic"},
+    {"as", "asturianu"},
+    {"az", "azerbaijani"},
+    {"ba", "bashkir"},
+    {"be", "belarusian"},
+    {"bg", "bulgarian"},
+    {"br", "breton"},
+    {"bs", "bosnian"},
+    {"ca", "catalan"},
+    {"cs", "czech"},
+    {"cy", "welsh"},
+    {"da", "danish"},
+    {"de", "german"},
+    {"el", "greek"},
+    {"en", "english"},
+    {"eo", "esperanto"},
+    {"es", "spanish"},
+    {"et", "estonian"},
+    {"eu", "basque"},
+    {"fa", "persian"},
+    {"fi", "finnish"},
+    {"fil", "filipino"},
+    {"fo", "faroese"},
+    {"fr", "french"},
+    {"fy", "frisian"},
+    {"ga", "irish"},
+    {"gd", "scottish gaelic"},
+    {"gl", "galician"},
+    {"gv", "manx"},
+    {"ha", "hawaiian"},
+    {"he", "hebrew"},
+    {"hi", "hindi"},
+    {"hr", "croatian"},
+    {"hu", "hungarian"},
+    {"hy", "armenian"},
+    {"id", "indonesian"},
+    {"ig", "igbo"},
+    {"io", "ido"},
+    {"is", "icelandic"},
+    {"it", "italian"},
+    {"ja", "japanese"},
+    {"jb", "lojban"},
+    {"ka", "georgian"},
+    {"kk", "kazakh"},
+    {"kn", "kannada"},
+    {"ko", "korean"},
+    {"ks", "colognian"},
+    {"kw", "cornish"},
+    {"la", "latin"},
+    {"lb", "luxembourgish"},
+    {"li", "limburgish"},
+    {"lt", "lithuanian"},
+    {"lv", "latvian"},
+    {"mi", "maori"},
+    {"mk", "macedonian"},
+    {"mn", "mongolian"},
+    {"ms", "malay"},
+    {"mt", "maltese"},
+    {"nd", "low german"},
+    {"nl", "dutch"},
+    {"nn", "norwegian nynorsk"},
+    {"no", "norwegian"},
+    {"oc", "occitan"},
+    {"pl", "polish"},
+    {"pt", "portuguese"},
+    {"qy", "quenya"},
+    {"ro", "romanian"},
+    {"ru", "russian"},
+    {"se", "northern sami"},
+    {"sk", "slovak"},
+    {"sl", "slovenian"},
+    {"so", "somali"},
+    {"sq", "albanian"},
+    {"sr", "serbian"},
+    {"sv", "swedish"},
+    {"sx", "saxon"},
+    {"sz", "silesian"},
+    {"ta", "tamil"},
+    {"th", "thai"},
+    {"tl", "tagalog"},
+    {"tlh", "klingon"},
+    {"tr", "turkish"},
+    {"tt", "tatar"},
+    {"uk", "ukrainian"},
+    {"val", "valencian"},
+    {"vec", "venetian"},
+    {"vi", "vietnamese"},
+    {"yi", "yiddish"},
+    {"yo", "yoruba"},
+    {"zh", "chinese"}
+};
+
 struct message_locale
 {
     message_locale(std::map<std::string, std::string> messages_, std::string def)
@@ -81,6 +175,7 @@ class User
             name = "placeholder name";
             uuid.generate(name);
             locale = "en_US";
+            language = "english";
             render_distance = 8;
             pos = {2.0f, 64.0f, 2.0f};
             prev_pos = {2.0f, 64.0f, 2.0f};
@@ -100,6 +195,7 @@ class User
         std::string name;
         std::string pronouns;
         std::string locale;
+        std::string language;
         position pos;
         chunk_pos_ chunk_pos;
         position prev_pos;
@@ -433,10 +529,10 @@ void system_chat(message_locale msg)
 {
     for (auto user: users)
     {
-        auto locale_msg = msg.messages.find(user.second.locale);
+        auto locale_msg = msg.messages.find(user.second.language);
         if (locale_msg == msg.messages.end())
         {
-            log("Couldnt find message for locale ", user.second.locale);
+            log("Couldnt find message for language ", user.second.language);
             std::tuple<minecraft::varint, minecraft::string_tag, bool> system_chat = 
             {
                 minecraft::varint(0x6C), minecraft::string_tag(msg.default_message), false
@@ -445,7 +541,7 @@ void system_chat(message_locale msg)
         }
         else
         {
-            log("Found message for locale ", user.second.locale);
+            log("Found message for language ", user.second.language);
             std::tuple<minecraft::varint, minecraft::string_tag, bool> system_chat = 
             {
                 minecraft::varint(0x6C), minecraft::string_tag(locale_msg->second), false
@@ -638,6 +734,14 @@ void execute_packet(packet pkt, User &user)
             log(std::format("Locale {}, render distance {}, chat mode {}", std::get<0>(client_information).str, 
             (int)std::get<1>(client_information), std::get<2>(client_information).num));
             user.locale = std::get<0>(client_information).str;
+            auto language = languages.find(user.locale.substr(0, 2));
+            if (language == languages.end())
+            {
+                user.language = "english";
+            }
+            else
+                user.language = language->second;
+            log(std::format("New user has {} language", user.language));
             user.render_distance = (int)std::get<1>(client_information);
 
             auto known_packs = std::make_tuple(minecraft::varint(0x0E), minecraft::varint(1),
@@ -698,10 +802,9 @@ void execute_packet(packet pkt, User &user)
                 (user.angle.yaw/ 360) * 256, minecraft::varint(0),0,0,0
             };
 			send_everyone_visible(spawn_entity_user, user.pos.x, user.pos.y, user.pos.z);
-            message_locale conn_msg({{"en_us", std::format("{} connected", user.name)},
-                                     {"en_uk", std::format("{} connected", user.name)},
-                                     {"es_es", std::format("{} se conectó", user.name)},
-                                     {"ca_es", std::format("{} s'ha connectat", user.name)}}, std::format("{} connected", user.name));
+            message_locale conn_msg({{"english", std::format("{} connected", user.name)},
+                                     {"spanish", std::format("{} se conectó", user.name)},
+                                     {"catalan", std::format("{} s'ha connectat", user.name)}}, std::format("{} connected", user.name));
             system_chat(conn_msg);
             for (auto us: users)
             {
