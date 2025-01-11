@@ -365,7 +365,7 @@ void update_players_position(User user)
 {
     for (auto us: users)
     {
-        if (us.second.sockfd != user.sockfd && us.second.state == PLAY && user.state == PLAY)
+        if (us.second.sockfd != user.sockfd && us.second.state == PLAY && user.state == PLAY && user.loading == false)
         {
             std::tuple<minecraft::varint, minecraft::varint, double, double, double, char, char, bool> update_pos =
             {
@@ -415,7 +415,7 @@ void send_everyone_except_overwhelmed(std::tuple<T...> packet)
 {
     for (auto us: users)
     {
-        if (us.second.state == PLAY && us.second.overwhelmed == false)
+        if (us.second.state == PLAY && us.second.overwhelmed == false && us.second.loading == false)
         {
             send_packet(packet, us.second.sockfd);
         }
@@ -605,7 +605,7 @@ void update_visible_chunks()
 {
     for (auto user: users)
     {
-        if (user.second.state == PLAY)
+        if (user.second.state == PLAY && user.second.loading == false)
         {
             position pos = user.second.pos;
             chunk_pos_ curr_pos = {(int)(floor(pos.x/16.0f)), (int)(floor(pos.z/16.0f))};
@@ -1021,19 +1021,19 @@ void execute_packet(packet pkt, User &user)
                 log(std::format("Got {} items with id {}", std::get<1>(set_slot).num, std::get<0>(item_id).num));
                 std::string name = items[std::get<0>(item_id).num]["name"];
                 log("name is ", name);
+                user.inventory_item[std::get<0>(set_slot)] = std::get<0>(item_id).num;
+                if (std::get<0>(set_slot) == user.selected_inv)
+                {
+                    auto set_equipment = std::make_tuple(minecraft::varint(0x5B), minecraft::varint(user.sockfd), (char)0, 
+                    minecraft::varint(1), std::get<0>(item_id), minecraft::varint(0), minecraft::varint(0));
+                    send_everyone_except_user(set_equipment, user.sockfd);
+                }
                 for (auto obj: blocks)
                 {
                     std::string name2 = obj["name"];
                     if (name.compare(name2) == 0)
                     {
                         user.inventory[std::get<0>(set_slot)] = obj["defaultState"];
-                        user.inventory_item[std::get<0>(set_slot)] = std::get<0>(item_id).num;
-                        if (std::get<0>(set_slot) == user.selected_inv)
-                        {
-                            auto set_equipment = std::make_tuple(minecraft::varint(0x5B), minecraft::varint(user.sockfd), (char)0, 
-                            minecraft::varint(1), std::get<0>(item_id), minecraft::varint(0), minecraft::varint(0));
-                            send_everyone_except_user(set_equipment, user.sockfd);
-                        }
                         break;
                     }
                 }
@@ -1223,11 +1223,6 @@ int main(int argc, char *argv[])
             auto user_ = users.find(pack.sock);
             if (user_ == users.end())
                 continue;
-            if (user_->second.loading == true)
-            {
-                log("Packet skipped");
-                continue;
-            }
             execute_packet(pack, user_->second);
             free(pack.start_data);
             tick_packets.erase(tick_packets.begin() + i);
