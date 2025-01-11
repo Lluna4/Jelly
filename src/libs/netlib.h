@@ -12,6 +12,7 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <sys/epoll.h>
+#include <netinet/tcp.h>
 
 namespace netlib
 {

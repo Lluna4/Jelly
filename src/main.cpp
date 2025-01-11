@@ -184,6 +184,7 @@ class User
             sneaking = false;
             selected_inv = 36;
             inventory.resize(46);
+            inventory_item.resize(46);
             overwhelmed = false;
             chunk_pos = {0, 0};
             loading = false;
@@ -206,6 +207,7 @@ class User
         bool overwhelmed;
         bool loading;
         std::vector<unsigned long> inventory;
+        std::vector<unsigned long> inventory_item;
         void to_file()
         {
             int fd = open(std::format("{}.dat", name).c_str(), O_WRONLY | O_CREAT);
@@ -389,7 +391,7 @@ void send_everyone(std::tuple<T...> packet)
 {
     for (auto us: users)
     {
-        if (us.second.state == PLAY)
+        if (us.second.state == PLAY && us.second.loading == false)
         {
             send_packet(packet, us.second.sockfd);
         }
@@ -401,7 +403,7 @@ void send_everyone_except_user(std::tuple<T...> packet, int id)
 {
     for (auto us: users)
     {
-        if (us.second.state == PLAY && us.second.sockfd != id)
+        if (us.second.state == PLAY && us.second.sockfd != id && us.second.loading == false)
         {
             send_packet(packet, us.second.sockfd);
         }
@@ -427,7 +429,7 @@ void send_everyone_visible(std::tuple<T...> packet, int x, int y, int z)
     float chunk_pos_z = floor(z/16.0f);
     for (auto us: users)
     {
-        if (us.second.state == PLAY)
+        if (us.second.state == PLAY && us.second.loading == false)
         {
             if (us.second.chunk_pos.x + us.second.render_distance > (int)chunk_pos_x && us.second.chunk_pos.x - us.second.render_distance < (int)chunk_pos_x)
             {
@@ -1003,6 +1005,9 @@ void execute_packet(packet pkt, User &user)
             std::tuple<short> set_held_item;
             set_held_item = read_packet(set_held_item, pkt.data);
             user.selected_inv = std::get<0>(set_held_item) + 36;
+            auto set_equipment = std::make_tuple(minecraft::varint(0x5B), minecraft::varint(user.sockfd), (char)0, 
+            minecraft::varint(1), minecraft::varint(user.inventory_item[user.selected_inv]), minecraft::varint(0), minecraft::varint(0));
+            send_everyone_except_user(set_equipment, user.sockfd);
         }
         else if (pkt.id == 0x32)
         {
@@ -1022,6 +1027,13 @@ void execute_packet(packet pkt, User &user)
                     if (name.compare(name2) == 0)
                     {
                         user.inventory[std::get<0>(set_slot)] = obj["defaultState"];
+                        user.inventory_item[std::get<0>(set_slot)] = std::get<0>(item_id).num;
+                        if (std::get<0>(set_slot) == user.selected_inv)
+                        {
+                            auto set_equipment = std::make_tuple(minecraft::varint(0x5B), minecraft::varint(user.sockfd), (char)0, 
+                            minecraft::varint(1), std::get<0>(item_id), minecraft::varint(0), minecraft::varint(0));
+                            send_everyone_except_user(set_equipment, user.sockfd);
+                        }
                         break;
                     }
                 }
