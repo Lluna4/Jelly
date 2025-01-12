@@ -16,7 +16,6 @@
 
 int epfd;
 
-std::vector<packet> tick_packets;
 using login_play = std::tuple<
                 minecraft::varint, int, bool, minecraft::varint, minecraft::string, minecraft::varint,
                 minecraft::varint, minecraft::varint, bool, bool, bool,
@@ -188,6 +187,8 @@ class User
             overwhelmed = false;
             chunk_pos = {0, 0};
             loading = false;
+            ticks_since_keep_alive = 0;
+            ticks_to_keep_alive = 200;
         }
         int selected_inv;
         int state;
@@ -208,6 +209,9 @@ class User
         bool loading;
         std::vector<unsigned long> inventory;
         std::vector<unsigned long> inventory_item;
+        int ticks_to_keep_alive;
+        int ticks_since_keep_alive;
+        std::vector<packet> tick_packets;
         void to_file()
         {
             int fd = open(std::format("{}.dat", name).c_str(), O_WRONLY | O_CREAT);
@@ -676,6 +680,100 @@ void update_visible_chunks()
     }
 }
 
+void disconnect_user(int current_fd)
+{
+    netlib::disconnect_server(current_fd, epfd);
+    auto current_user = users.find(current_fd)->second;
+    if (current_user.state == PLAY)
+    {
+        system_chat(minecraft::string(std::format("{} disconnected", current_user.name)));
+        current_user.to_file();
+    }
+    minecraft::uuid uuid = current_user.uuid;
+    users.erase(current_fd);
+    
+    std::tuple<minecraft::varint, minecraft::varint, minecraft::varint> remove_entity = 
+    {
+        minecraft::varint(0x42), minecraft::varint(1), minecraft::varint(current_fd)
+    };
+    std::tuple<minecraft::varint, minecraft::varint, minecraft::uuid> remove_info = 
+    {
+        minecraft::varint(0x3D), minecraft::varint(1), uuid
+    };
+    for (auto user: users)
+    {
+        if (user.second.state == PLAY)
+        {
+            send_packet(remove_entity, user.second.sockfd);
+            send_packet(remove_info, user.second.sockfd);
+        }
+    }
+}
+
+void disconnect_user(User current_user)
+{
+    netlib::disconnect_server(current_user.sockfd, epfd);
+    if (current_user.state == PLAY)
+    {
+        system_chat(minecraft::string(std::format("{} disconnected", current_user.name)));
+        current_user.to_file();
+    }
+    minecraft::uuid uuid = current_user.uuid;
+    users.erase(current_user.sockfd);
+    
+    std::tuple<minecraft::varint, minecraft::varint, minecraft::varint> remove_entity = 
+    {
+        minecraft::varint(0x42), minecraft::varint(1), minecraft::varint(current_user.sockfd)
+    };
+    std::tuple<minecraft::varint, minecraft::varint, minecraft::uuid> remove_info = 
+    {
+        minecraft::varint(0x3D), minecraft::varint(1), uuid
+    };
+    for (auto user: users)
+    {
+        if (user.second.state == PLAY)
+        {
+            send_packet(remove_entity, user.second.sockfd);
+            send_packet(remove_info, user.second.sockfd);
+        }
+    }
+}
+
+void update_keep_alive()
+{
+    for (auto &user: users)
+    {
+        if (user.second.state == PLAY && user.second.loading == false)
+        {
+            if (user.second.ticks_to_keep_alive > 0)
+            {
+                user.second.ticks_to_keep_alive--;
+                //log(std::format("Ticks to keep alive {}", user.second.ticks_to_keep_alive));
+            }
+            else if (user.second.ticks_to_keep_alive == 0)
+            {
+                std::tuple<minecraft::varint, long> keep_alive = {minecraft::varint(0x26), 12324};
+                send_packet(keep_alive, user.second.sockfd);
+                user.second.ticks_to_keep_alive--;
+            }
+            else if (user.second.ticks_to_keep_alive < 0)
+            {
+                if (user.second.ticks_since_keep_alive > 600)
+                {
+                    disconnect_user(user.second);
+                    continue;
+                }
+                else
+                {
+                    user.second.ticks_since_keep_alive++;
+                }
+            }
+        }
+    }
+}
+
+
+
 void execute_packet(packet pkt, User &user)
 {
     if (user.state == HANDSHAKE)
@@ -1000,6 +1098,20 @@ void execute_packet(packet pkt, User &user)
             }
             log("Removed block");
         }
+        else if (pkt.id == 0x18)
+        {
+            std::tuple<long> keep_alive_response;
+            keep_alive_response = read_packet(keep_alive_response, pkt.data);
+            if (std::get<0>(keep_alive_response) == 12324)
+            {
+                user.ticks_to_keep_alive = 200;
+                user.ticks_since_keep_alive = 0;
+            }
+            else
+            {
+                disconnect_user(user);
+            }
+        }
         else if (pkt.id == 0x2F)
         {
             std::tuple<short> set_held_item;
@@ -1125,32 +1237,7 @@ void recv_thread()
             //log("status: ", status);
             if (status == -1 || status == 0)
             {
-                netlib::disconnect_server(current_fd, epfd);
-                auto current_user = users.find(current_fd)->second;
-                if (current_user.state == PLAY)
-                {
-                    system_chat(minecraft::string(std::format("{} disconnected", current_user.name)));
-                    current_user.to_file();
-                }
-                minecraft::uuid uuid = current_user.uuid;
-                users.erase(current_fd);
-                
-                std::tuple<minecraft::varint, minecraft::varint, minecraft::varint> remove_entity = 
-                {
-                    minecraft::varint(0x42), minecraft::varint(1), minecraft::varint(current_fd)
-                };
-                std::tuple<minecraft::varint, minecraft::varint, minecraft::uuid> remove_info = 
-                {
-                    minecraft::varint(0x3D), minecraft::varint(1), uuid
-                };
-                for (auto user: users)
-                {
-                    if (user.second.state == PLAY)
-                    {
-                        send_packet(remove_entity, user.second.sockfd);
-                        send_packet(remove_info, user.second.sockfd);
-                    }
-                }
+                disconnect_user(current_fd);
             }
 
             
@@ -1163,7 +1250,7 @@ void recv_thread()
                     execute_packet(pack, users.find(current_fd)->second);
                     continue;
                 }
-                tick_packets.push_back(pack);
+                users.find(current_fd)->second.tick_packets.push_back(pack);
             }
             memset(buff.start_data, 0, 4096);
             buff.data = buff.start_data;
@@ -1216,16 +1303,16 @@ int main(int argc, char *argv[])
     while (true)
     {   
         const auto before = clock::now();
-        for (int i = 0; i < tick_packets.size();i++)
+        for (auto &user: users)
         {
-            packet pack = tick_packets[i];
-            log(std::format("Got a packet with id {} and size {}", pack.id, pack.size));
-            auto user_ = users.find(pack.sock);
-            if (user_ == users.end())
-                continue;
-            execute_packet(pack, user_->second);
-            free(pack.start_data);
-            tick_packets.erase(tick_packets.begin() + i);
+            for (int i = 0; i < user.second.tick_packets.size();i++)
+            {
+                packet pack = user.second.tick_packets[i];
+                log(std::format("Got a packet with id {} and size {}", pack.id, pack.size));
+                execute_packet(pack, user.second);
+                free(pack.start_data);
+                user.second.tick_packets.erase(user.second.tick_packets.begin() + i);
+            }
         }
         //tick_packets.clear();
         for (auto user: users)
@@ -1237,14 +1324,7 @@ int main(int argc, char *argv[])
             user.second.prev_pos = user.second.pos;
         }
         update_visible_chunks();
-        if (ticks_until_keep_alive == 0)
-        {
-            std::tuple<minecraft::varint, long> keep_alive = {minecraft::varint(0x26), 12324};
-            send_everyone(keep_alive);
-            ticks_until_keep_alive = 200;
-        }
-        else
-            ticks_until_keep_alive--;
+        update_keep_alive();
         const ms duration = clock::now() - before;
         //log("MSPT ", duration.count(), "ms");
         if (duration.count() > 50)
