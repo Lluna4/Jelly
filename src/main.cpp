@@ -50,6 +50,8 @@ struct position
     
 };
 
+long time_ticks = 0;
+
 struct chunk_pos_
 {
     int x, z;
@@ -531,6 +533,15 @@ void system_chat(minecraft::string message)
     send_everyone(system_chat);
 }
 
+void system_chat_unique(minecraft::string message, int sock)
+{
+    std::tuple<minecraft::varint, minecraft::string_tag, bool> system_chat = 
+    {
+        minecraft::varint(0x6C), minecraft::string_tag(message.str), false
+    };
+    send_packet(system_chat, sock);
+}
+
 void system_chat(message_locale msg)
 {
     for (auto user: users)
@@ -938,6 +949,8 @@ void execute_packet(packet pkt, User &user)
                     }
                 }
             }
+            auto set_time = std::make_tuple(minecraft::varint(0x64), (long)time_ticks, (long)(time_ticks%24000));
+            send_packet(set_time, user.sockfd);
             std::tuple<minecraft::varint, minecraft::varint, minecraft::varint> set_center_chunk =
             {
                 minecraft::varint(0x54), minecraft::varint(0), minecraft::varint(0)
@@ -981,11 +994,11 @@ void execute_packet(packet pkt, User &user)
                         };
                 send_everyone(info_update_head_user);
                 if (user.locale.compare("en_us") == 0 || user.locale.compare("en_uk") == 0)
-                	system_chat(std::format("Your pronouns have changed to {}", command_contents));
+                	system_chat_unique(std::format("Your pronouns have changed to {}", command_contents), user.sockfd);
                 else if (user.locale.compare("es_es") == 0)
-                    system_chat(std::format("Tus pronombres han cambiado a {}", command_contents));
+                    system_chat_unique(std::format("Tus pronombres han cambiado a {}", command_contents), user.sockfd);
                 else if (user.locale.compare("ca_es") == 0)
-                    system_chat(std::format("Els teus pronoms han canviat a {}", command_contents));
+                    system_chat_unique(std::format("Els teus pronoms han canviat a {}", command_contents), user.sockfd);
             }
             if (commands.starts_with("overwhelmed"))
             {
@@ -1307,7 +1320,7 @@ int main(int argc, char *argv[])
         {
             for (int i = 0; i < user.second.tick_packets.size();i++)
             {
-                packet pack = user.second.tick_packets[i];
+                packet pack = user.second.tick_packets[i];     
                 log(std::format("Got a packet with id {} and size {}", pack.id, pack.size));
                 execute_packet(pack, user.second);
                 free(pack.start_data);
@@ -1325,6 +1338,7 @@ int main(int argc, char *argv[])
         }
         update_visible_chunks();
         update_keep_alive();
+        time_ticks++;
         const ms duration = clock::now() - before;
         //log("MSPT ", duration.count(), "ms");
         if (duration.count() > 50)
