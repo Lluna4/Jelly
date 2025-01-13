@@ -80,7 +80,7 @@ namespace minecraft
 				break;
 			}
 		}
-		std::println("zero id is {}", zero_id);
+		//std::println("zero id is {}", zero_id);
 		light_data.resize(4096);
 		for (int z = 0; z < 16;z++)
 		{

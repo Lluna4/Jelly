@@ -13,6 +13,7 @@
 #include "libs/comp_time_read.hpp"
 #include "libs/chunks.hpp"
 #include "libs/tokenize.hpp"
+#include "libs/config.hpp"
 
 int epfd;
 
@@ -51,6 +52,7 @@ struct position
 };
 
 long time_ticks = 0;
+int connected_users = 0;
 
 struct chunk_pos_
 {
@@ -284,7 +286,7 @@ void status_response(User user)
 	std::string response_str;
 	json response;
 	json fav;
-	std::string base64 = std::format("data:image/png;base64,{}", base64_encode("a.png"));
+	std::string base64 = std::format("data:image/png;base64,{}", base64_encode(icon_path));
 	response ={
 		{"version", {
 			{"name", "1.21.1"},
@@ -292,10 +294,10 @@ void status_response(User user)
 		}},
 		{"players", {
 			{"max", 20},
-			{"online", users.size()}
+			{"online", connected_users}
 		}},
 		{"description", {
-			{"text", "Hiiiii!"}
+			{"text", motd}
 		}},
         {"favicon", base64}
 	};
@@ -699,6 +701,7 @@ void disconnect_user(int current_fd)
     {
         system_chat(minecraft::string(std::format("{} disconnected", current_user.name)));
         current_user.to_file();
+        connected_users--;
     }
     minecraft::uuid uuid = current_user.uuid;
     users.erase(current_fd);
@@ -728,6 +731,7 @@ void disconnect_user(User current_user)
     {
         system_chat(minecraft::string(std::format("{} disconnected", current_user.name)));
         current_user.to_file();
+        connected_users--;
     }
     minecraft::uuid uuid = current_user.uuid;
     users.erase(current_user.sockfd);
@@ -969,7 +973,8 @@ void execute_packet(packet pkt, User &user)
             send_packet(tick_state, user.sockfd);
             send_chunk(user, user.chunk_pos.x, user.chunk_pos.z);
             std::thread send_world_th(send_world, std::ref(user));
-            send_world_th.detach();   
+            send_world_th.detach();  
+            connected_users++; 
         }
     }
     if (user.state == PLAY)
@@ -1280,7 +1285,13 @@ int main(int argc, char *argv[])
     }
     using clock = std::chrono::system_clock;
     using ms = std::chrono::duration<double, std::milli>;
-    int sock = netlib::init_server("0.0.0.0", 25565);
+    if (std::filesystem::exists("server.properties") == false)
+    {
+        create_config();
+        log("Config file created!");
+    }
+    load_config();
+    int sock = netlib::init_server(SV_IP, SV_PORT);
     if (sock == -1)
     {
         log_err("server init failed!");
@@ -1291,6 +1302,7 @@ int main(int argc, char *argv[])
 		std::filesystem::create_directory("logs");
 		log("Created logging folder!");
 	}
+
 	generate_file_name();
     epfd = epoll_create1(0);
     log("epfd is ", epfd);
