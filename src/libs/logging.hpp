@@ -9,8 +9,15 @@
 #else
 	#include <stdio.h>
 	#define NO_FORMAT
-	#pragma warn("No hay <format>")
+	#pragma warn("No <format>")
 #endif
+
+enum SCALE
+{
+	INFO,
+	WARN,
+	ERROR
+};
 
 std::string file_name;
 
@@ -93,48 +100,31 @@ void log(T value)
 }
 
 template<typename T>
-void log(T value, T value2)
+void log(T value, int scale)
 {
-	std::string log_msg = std::format("[{}] {}{}", get_time(), value, value2);
-    std::println("[{}] {}{}", get_time(), value, value2);
-	write_to_file(log_msg);
-}
+	switch (scale)
+	{
+	case INFO:
+	{
+		std::string log_msg = std::format("[{}] INFO: {}", get_time(), value);
+		std::println("[{}] INFO: {}", get_time(), value);
+		write_to_file(log_msg);
+		break;
+	}
+	case WARN:
+	{
+		std::string log_msg = std::format("[{}] WARN: {}", get_time(), value);
+		std::println("\e[0;33m[{}] WARN: {}\e[0m", get_time(), value);
+		write_to_file(log_msg);
+	}
+	case ERROR:
+	{
+		std::string log_msg = std::format("[{}] ERROR: {}", get_time(), value);
+		std::println("\e[0;31m[{}] ERROR: {}\e[0m", get_time(), value);
+		write_to_file(log_msg);
+	}
+	default:
+		break;
+	}
 
-template<typename T>
-void log_err(T value)
-{
-	std::string log_msg = std::format("\x1B[91m[{}] {}\033[0m\t\t", get_time(), value);
-    std::println("\x1B[91m[{}] {}\033[0m\t\t", get_time(), value);
-	write_to_file(log_msg);
-}
-
-template<typename T, typename B>
-void log_err(T value, B value2)
-{
-	std::string log_msg = std::format("\x1B[91m[{}] {}{}\033[0m\t\t", get_time(), value, value2);
-    std::println("\x1B[91m[{}] {}{}\033[0m\t\t", get_time(), value, value2);
-	write_to_file(log_msg);
-}
-
-template<typename T, typename B>
-void log(T value, B value2, T value3)
-{
-	std::string log_msg = std::format("[{}] {}{}{}", get_time(), value, value2, value3);
-    std::println("[{}] {}{}{}", get_time(), value, value2, value3);
-	write_to_file(log_msg);
-}
-
-template<typename T, typename B>
-void log(T value, B value2)
-{
-	std::string log_msg = std::format("[{}] {}{}", get_time(), value, value2);
-    std::println("[{}] {}{}", get_time(), value, value2);
-	write_to_file(log_msg);
-}
-
-void log_header()
-{
-	std::string log_msg = std::format("[{}] ", get_time());
-    std::print("[{}] ", get_time());
-	write_to_file(log_msg);
 }

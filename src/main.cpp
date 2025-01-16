@@ -551,7 +551,7 @@ void system_chat(message_locale msg)
         auto locale_msg = msg.messages.find(user.second.language);
         if (locale_msg == msg.messages.end())
         {
-            log("Couldnt find message for language ", user.second.language);
+            log(std::format("Couldnt find message for language {}", user.second.language), INFO);
             std::tuple<minecraft::varint, minecraft::string_tag, bool> system_chat = 
             {
                 minecraft::varint(0x6C), minecraft::string_tag(msg.default_message), false
@@ -560,7 +560,7 @@ void system_chat(message_locale msg)
         }
         else
         {
-            log("Found message for language ", user.second.language);
+            log(std::format("Found message for language {}", user.second.language), INFO);
             std::tuple<minecraft::varint, minecraft::string_tag, bool> system_chat = 
             {
                 minecraft::varint(0x6C), minecraft::string_tag(locale_msg->second), false
@@ -1043,7 +1043,7 @@ void execute_packet(packet pkt, User &user)
             user.pos.y = std::get<1>(position_set);
             user.pos.z = std::get<2>(position_set);
             user.on_ground = std::get<3>(position_set);
-            log(std::format("Moved to x {} y {} z {} on_ground {} (1)", user.pos.x, user.pos.y, user.pos.z, user.on_ground));
+            log(std::format("Moved to x {} y {} z {} on_ground {} (1)", user.pos.x, user.pos.y, user.pos.z, user.on_ground), INFO);
         }
         else if (pkt.id == 0x1B)
         {
@@ -1055,7 +1055,7 @@ void execute_packet(packet pkt, User &user)
             user.angle.yaw = std::get<3>(position_rotation_set);
             user.angle.pitch = std::get<4>(position_rotation_set);
             user.on_ground = std::get<5>(position_rotation_set);
-            log(std::format("Moved to x {} y {} z {} on_ground {} (2)", user.pos.x, user.pos.y, user.pos.z, user.on_ground));
+            log(std::format("Moved to x {} y {} z {} on_ground {} (2)", user.pos.x, user.pos.y, user.pos.z, user.on_ground), INFO);
         }
         else if (pkt.id == 0x1C)
         {
@@ -1150,7 +1150,7 @@ void execute_packet(packet pkt, User &user)
                 item_id = read_packet(item_id, pkt.data);
                 log(std::format("Got {} items with id {}", std::get<1>(set_slot).num, std::get<0>(item_id).num));
                 std::string name = items[std::get<0>(item_id).num]["name"];
-                log("name is ", name);
+                log(std::format("name is {}", name), INFO);
                 user.inventory_item[std::get<0>(set_slot)] = std::get<0>(item_id).num;
                 if (std::get<0>(set_slot) == user.selected_inv)
                 {
@@ -1245,7 +1245,7 @@ void recv_thread()
     {
         events_ready = epoll_wait(epfd, events, 1024, -1);
         if (events_ready == -1)
-            log("Error! ", strerror(errno));
+            log(std::format("Error! {}", strerror(errno)), ERROR);
         //log("Events ready ", events_ready);
         for (int i = 0; i < events_ready;i++)
         {
@@ -1288,13 +1288,13 @@ int main(int argc, char *argv[])
     if (std::filesystem::exists("server.properties") == false)
     {
         create_config();
-        log("Config file created!");
+        log("Config file created!", INFO);
     }
     load_config();
     int sock = netlib::init_server(SV_IP, SV_PORT);
     if (sock == -1)
     {
-        log_err("server init failed!");
+        log("server init failed!", ERROR);
         return -1;
     }
 	if (std::filesystem::exists("logs") == false)
@@ -1305,7 +1305,7 @@ int main(int argc, char *argv[])
 
 	generate_file_name();
     epfd = epoll_create1(0);
-    log("epfd is ", epfd);
+    log(std::format("epfd is {}", epfd), INFO);
     std::thread accept_t(accept_th, sock);
     accept_t.detach();
     std::thread read_t(recv_thread);
@@ -1317,7 +1317,7 @@ int main(int argc, char *argv[])
             find_chunk(x, y);	
         }
     }
-    log("world created");
+    log("world created", INFO);
     std::ifstream f("items.json");
     items = json::parse(f);
     f.close();
@@ -1353,9 +1353,7 @@ int main(int argc, char *argv[])
         time_ticks++;
         const ms duration = clock::now() - before;
         //log("MSPT ", duration.count(), "ms");
-        if (duration.count() > 50)
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
-        else
-                std::this_thread::sleep_for(std::chrono::milliseconds(50) - duration);
+        if (duration.count() <= 50)
+            std::this_thread::sleep_for(std::chrono::milliseconds(50) - duration);
     }
 }

@@ -8,7 +8,6 @@
 int SV_PORT = 25565;
 std::string SV_IP = "0.0.0.0";
 std::string motd = "A Minecraft Server";
-std::string dc_msg = "Server in development";
 std::string icon_path = "favicon.png";
 int sv_render_distance = 8;
 
@@ -51,7 +50,6 @@ void create_config()
     cfg << "server-ip=\n";
     cfg << "server-port=25565\n";
     cfg << "motd=A Minecraft Server\n";
-    cfg << "test-disconnect-msg=Server in development\n";
     cfg << "icon-path=favicon.png\n";
     cfg << "server-render-distance=8\n";
     cfg.close();
@@ -83,13 +81,6 @@ void load_config()
                 if (tokens.size() > 1)
                 {
                     motd = tokens[1];
-                }
-            }
-            else if (tokens[0].compare("test-disconnect-msg") == 0)
-            {
-                if (tokens.size() > 1)
-                {
-                    dc_msg = tokens[1];
                 }
             }
             else if (tokens[0].compare("icon-path") == 0)
