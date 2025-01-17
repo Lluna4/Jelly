@@ -955,6 +955,9 @@ void execute_packet(packet pkt, User &user)
             }
             auto set_time = std::make_tuple(minecraft::varint(0x64), (long)time_ticks, (long)(time_ticks%24000));
             send_packet(set_time, user.sockfd);
+            auto set_effect = std::make_tuple(minecraft::varint(0x76), minecraft::varint(user.sockfd), minecraft::varint(15),
+            minecraft::varint(1), minecraft::varint(240000), (char)0x04);
+            send_packet(set_effect, user.sockfd);
             std::tuple<minecraft::varint, minecraft::varint, minecraft::varint> set_center_chunk =
             {
                 minecraft::varint(0x54), minecraft::varint(0), minecraft::varint(0)
@@ -1352,7 +1355,7 @@ int main(int argc, char *argv[])
         update_keep_alive();
         time_ticks++;
         const ms duration = clock::now() - before;
-        //log("MSPT ", duration.count(), "ms");
+        log(std::format("MSPT {}ms", duration.count()), INFO);
         if (duration.count() <= 50)
             std::this_thread::sleep_for(std::chrono::milliseconds(50) - duration);
     }

@@ -3,6 +3,7 @@
 #include <vector>
 #include <unordered_map>
 #include "utils.hpp"
+#include "PerlinNoise.hpp"
 
 enum palette_type
 {
@@ -198,12 +199,42 @@ namespace minecraft
 		{
 			for (int i = 0; i < 24; i++)
 			{
-				if (i < surface - 1)
-					sections.emplace_back(true, false, palette);
-				else if (i == surface - 1)
-					sections.emplace_back(true, true, palette);
+				sections.emplace_back(false, true, palette);
+			}
+		}
+
+		void place_block(int x, int y, int z, int block_id)
+		{
+			int section = (y + 64)/16;
+			int in_chunk_y = rem_euclid(y, 16);
+			if (sections[section].blocks.type == SINGLE_VALUED)
+			{
+				sections[section].blocks = minecraft::paletted_container(8, true, 0, {minecraft::varint(9), minecraft::varint(0), minecraft::varint(block_id)});
+				sections[section].blocks.data[(in_chunk_y*256) + (z*16) + x] = 2;
+				sections[section].block_count = 1;
+			}
+			else if (sections[section].blocks.type == INDIRECT)
+			{
+				int index = -1;
+				for (int i = 0; i < sections[section].blocks.palette.size();i++)
+				{
+					if (sections[section].blocks.palette[i].num == block_id)
+					{
+						index = i;
+						break;
+					}
+				}
+				if (index == -1)
+				{
+					sections[section].blocks.palette.emplace_back(block_id);
+					sections[section].blocks.data[(in_chunk_y*256) + (z*16) + x] = sections[section].blocks.palette.size() - 1;
+					sections[section].block_count += 1;
+				}
 				else
-					sections.emplace_back(false, true, palette);
+				{
+					sections[section].blocks.data[(in_chunk_y*256) + (z*16) + x] = index;
+					sections[section].block_count += 1; 
+				}
 			}
 		}
 		int x;
@@ -228,9 +259,28 @@ minecraft::chunk find_chunk(int x, int z)
 {
 	if (chunks.find({x, z}) == chunks.end()) //if it doesnt find a chunk it generates one
 	{
+		const siv::PerlinNoise::seed_type seed = 12156212u;
+
+		const siv::PerlinNoise perlin{ seed };
  	 	chunks.emplace(std::piecewise_construct,
                     std::forward_as_tuple(x, z),
                     std::forward_as_tuple(x, z));
+		auto &chunk = chunks[{x, z}];
+		for (int z_ = 0; z_ < 16; z_++)
+		{
+			for (int x_ = 0; x_ < 16; x_++)
+			{
+				const double noise = perlin.octave2D_01(((x_ + (x * 16)) * 0.001), ((z_ + (z * 16)) * 0.001), 8);
+				int height_ = static_cast<int>(noise*319);
+				for (int y = 0; y < height_; y++)
+				{
+					if (y == height_ - 1)
+						chunk.place_block(x_, y, z_, 9);
+					else
+						chunk.place_block(x_, y, z_, 10);
+				}
+			}
+		}
 	}
 	return chunks[{x, z}];
 }
