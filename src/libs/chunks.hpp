@@ -2,6 +2,7 @@
 #include <iostream>
 #include <vector>
 #include <unordered_map>
+#include <map>
 #include "utils.hpp"
 #include "PerlinNoise.hpp"
 
@@ -12,6 +13,32 @@ enum palette_type
 	DIRECT
 };
 bool LIGHT_POSTPROCESSING = true;
+
+struct dot
+{
+	dot(int start_h, int end_h, double start_n, double end_n)
+	:start_height(start_h), end_height(end_h), start_noise(start_n), end_noise(end_n)
+	{
+		n = abs(end_height - start_height)/abs(end_noise - start_noise);
+	}
+	int start_height;
+	int end_height;
+	double start_noise;
+	double end_noise;
+	double n;
+
+	int get_height(double noise)
+	{
+		return (n * (noise - start_noise) + start_height);
+	}
+};
+
+std::map<double, dot> t_map = {{-1.0, dot(30, 64, -1.0, -0.1)}, {-0.1, dot(64, 75, -0.1, 0.4)}, {0.4, dot(75, 90, 0.4, 0.6)},
+								{0.6, dot(90, 100, 0.6, 0.8)}, {0.8, dot(100, 130, 0.8, 0.9)}, {0.9, dot(130, 140, 0.9, 1.0)}};
+std::map<double, dot> t_map2 = {{-1.0, dot(-5, -2, -1.0, -0.5)}, {-0.5, dot(-2, 1, -0.5, 0.0)}, {0.0, dot(1, 4, 0.0, 1.0)}};
+std::map<double, dot> t_map3 = {{-1.0, dot(-30, -20, -1.0, -0.8)}, {-0.8, dot(-20, -5, -0.8, 0.0)}, {0.0, dot(-5, 30, 0.0, 0.5)},
+								{0.5, dot(15, 20, 0.5, 1.0)}};
+
 namespace minecraft
 {
 	struct paletted_container
@@ -259,7 +286,7 @@ minecraft::chunk find_chunk(int x, int z)
 {
 	if (chunks.find({x, z}) == chunks.end()) //if it doesnt find a chunk it generates one
 	{
-		const siv::PerlinNoise::seed_type seed = 12156212u;
+		const siv::PerlinNoise::seed_type seed = 2907u;
 
 		const siv::PerlinNoise perlin{ seed };
  	 	chunks.emplace(std::piecewise_construct,
@@ -270,14 +297,44 @@ minecraft::chunk find_chunk(int x, int z)
 		{
 			for (int x_ = 0; x_ < 16; x_++)
 			{
-				const double noise = perlin.octave2D_01(((x_ + (x * 16)) * 0.001), ((z_ + (z * 16)) * 0.001), 8);
-				int height_ = static_cast<int>(noise*319);
+				const double noise = perlin.octave2D_11(((x_ + (x * 16)) * 0.002), ((z_ + (z * 16)) * 0.002), 6);
+				
+				int height_ = 0;
+				for (auto p: t_map)
+				{
+					if (noise >= p.first)
+					{
+						if (noise <= p.second.end_noise)
+						{
+							height_ = p.second.get_height(noise);
+							break;
+						}
+					}
+				}
+				//log(height_, INFO);
 				for (int y = 0; y < height_; y++)
 				{
 					if (y == height_ - 1)
-						chunk.place_block(x_, y, z_, 9);
+					{
+						if (noise > 0.6)
+							chunk.place_block(x_, y, z_, 8);
+						else
+							chunk.place_block(x_, y, z_, 9);
+					}
 					else
 						chunk.place_block(x_, y, z_, 10);
+				}
+				if (height_ < 64)
+				{
+					chunk.place_block(x_, height_ - 1, z_, 10);
+					for (int y = height_; y < 64; y++)
+					{
+						chunk.place_block(x_, y, z_, 80);
+					}
+				}
+				if (height_ >= 120)
+				{
+					chunk.place_block(x_, height_ - 1, z_, 8);
 				}
 			}
 		}

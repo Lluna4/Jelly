@@ -180,8 +180,8 @@ class User
             locale = "en_US";
             language = "english";
             render_distance = 8;
-            pos = {2.0f, 64.0f, 2.0f};
-            prev_pos = {2.0f, 64.0f, 2.0f};
+            pos = {2.0f, 75.0f, 2.0f};
+            prev_pos = {2.0f, 75.0f, 2.0f};
             angle = {0.0f, 0.0f};
             on_ground = true;
             sneaking = false;
@@ -243,7 +243,7 @@ class User
             std::tuple<int, int, int, minecraft::uuid, minecraft::string, minecraft::string, minecraft::string, double, double, double, int, int, float, float, bool, bool, bool> data;
             read(fd, buf, 1024);
             data = read_packet(data, buf);
-            render_distance = std::get<2>(data);
+            //render_distance = std::get<2>(data);
             pronouns = std::get<5>(data).str;
             //locale = std::get<6>(data).str;
             pos.x = std::get<7>(data);
@@ -689,6 +689,7 @@ void update_visible_chunks()
                 }
                 users.find(user.second.sockfd)->second.chunk_pos = curr_pos;
             }
+            log("************SENT CHUNKS************", INFO);
         }
     }
 }
@@ -714,14 +715,8 @@ void disconnect_user(int current_fd)
     {
         minecraft::varint(0x3D), minecraft::varint(1), uuid
     };
-    for (auto user: users)
-    {
-        if (user.second.state == PLAY)
-        {
-            send_packet(remove_entity, user.second.sockfd);
-            send_packet(remove_info, user.second.sockfd);
-        }
-    }
+    send_everyone(remove_entity);
+    send_everyone(remove_info);
 }
 
 void disconnect_user(User current_user)
@@ -744,14 +739,8 @@ void disconnect_user(User current_user)
     {
         minecraft::varint(0x3D), minecraft::varint(1), uuid
     };
-    for (auto user: users)
-    {
-        if (user.second.state == PLAY)
-        {
-            send_packet(remove_entity, user.second.sockfd);
-            send_packet(remove_info, user.second.sockfd);
-        }
-    }
+    send_everyone(remove_entity);
+    send_everyone(remove_info);
 }
 
 void update_keep_alive()
@@ -765,7 +754,7 @@ void update_keep_alive()
                 user.second.ticks_to_keep_alive--;
                 //log(std::format("Ticks to keep alive {}", user.second.ticks_to_keep_alive));
             }
-            else if (user.second.ticks_to_keep_alive == 0)
+            else if (user.second.ticks_to_keep_alive == 0 && user.second.loading == false)
             {
                 std::tuple<minecraft::varint, long> keep_alive = {minecraft::varint(0x26), 12324};
                 send_packet(keep_alive, user.second.sockfd);
@@ -1115,7 +1104,8 @@ void execute_packet(packet pkt, User &user)
                 {
                     minecraft::varint(0x05), std::get<3>(player_action)
                 };
-                send_packet(awk_block, user.sockfd);
+                if (user.loading == false)
+                    send_packet(awk_block, user.sockfd);
             }
             log("Removed block");
         }
@@ -1231,7 +1221,8 @@ void execute_packet(packet pkt, User &user)
             {
                 minecraft::varint(0x05), std::get<7>(use_item_on)
             };
-            send_packet(awk_block, user.sockfd);
+            if (user.loading == false)
+                send_packet(awk_block, user.sockfd);
             log("Placed block");
         }
     }
