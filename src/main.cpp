@@ -575,45 +575,13 @@ void place_block(std::int32_t x, std::int32_t y, std::int32_t z, int block_id)
 {
     float chunk_pos_x = floor(x/16.0f);
     float chunk_pos_z = floor(z/16.0f);
-    minecraft::chunk placed_chunk = find_chunk((int)chunk_pos_x, (int)chunk_pos_z);
-    int section = (y + 64)/16;
+    minecraft::chunk &placed_chunk = find_chunk((int)chunk_pos_x, (int)chunk_pos_z);
     int in_chunk_x = rem_euclid(x, 16);
     int in_chunk_y = rem_euclid(y, 16);
     int in_chunk_z = rem_euclid(z, 16);
-    if (placed_chunk.sections[section].blocks.type == SINGLE_VALUED)
-    {
-        placed_chunk.sections[section].blocks = minecraft::paletted_container(8, true, 0, {minecraft::varint(9), minecraft::varint(0), minecraft::varint(block_id)});
-        placed_chunk.sections[section].blocks.data[(in_chunk_y*256) + (in_chunk_z*16) + in_chunk_x] = 2;
-        placed_chunk.sections[section].block_count = 1;
-        log("placed block");
-    }
-    else if (placed_chunk.sections[section].blocks.type == INDIRECT)
-    {
-        int index = -1;
-        for (int i = 0; i < placed_chunk.sections[section].blocks.palette.size();i++)
-        {
-            if (placed_chunk.sections[section].blocks.palette[i].num == block_id)
-            {
-                index = i;
-                break;
-            }
-        }
-        log("index is ", index);
-        if (index == -1)
-        {
-            placed_chunk.sections[section].blocks.palette.emplace_back(block_id);
-            placed_chunk.sections[section].blocks.data[(((rem_euclid(y, 16)))*256) + (abs(rem_euclid(z, 16))*16) + abs(rem_euclid(x, 16))] = placed_chunk.sections[section].blocks.palette.size() - 1;
-            placed_chunk.sections[section].block_count += 1;
-        }
-        else
-        {
-            placed_chunk.sections[section].blocks.data[(((rem_euclid(y, 16)))*256) + (abs(rem_euclid(z, 16))*16) + abs(rem_euclid(x, 16))] = index;
-            placed_chunk.sections[section].block_count += 1; 
-        }
-    }
-    chunks.find({chunk_pos_x, chunk_pos_z})->second = placed_chunk;
-    placed_chunk.sections[section].light = minecraft::calc_light(placed_chunk.sections[section].blocks);
-    log(std::format("Placed {} in chunk {}, {}, section {} in x {} y {} z {}",block_id ,chunk_pos_x, chunk_pos_z, (y + 64)/16 ,rem_euclid(x, 16), rem_euclid(y, 16), rem_euclid(z, 16)));
+
+    placed_chunk.place_block(in_chunk_x, y, in_chunk_z, block_id);
+    log(std::format("Placed {} in chunk {}, {}, section {} in x {} y {} z {}",block_id ,chunk_pos_x, chunk_pos_z, (y + 64)/16 ,rem_euclid(x, 16), rem_euclid(y, 16), z));
 }
 
 
@@ -1279,6 +1247,8 @@ int main(int argc, char *argv[])
     }
     using clock = std::chrono::system_clock;
     using ms = std::chrono::duration<double, std::milli>;
+    srandom(time(NULL));
+    s = random();
     if (std::filesystem::exists("server.properties") == false)
     {
         create_config();
@@ -1308,9 +1278,60 @@ int main(int argc, char *argv[])
     {
         for (int x = -12; x < 12; x++)
         {
-            find_chunk(x, y);	
+            find_chunk(x, y);
         }
     }
+
+    for (int i = 0; i < 100; i++)
+    {
+        int x = (random()%(24 * 16) - (12 * 16));
+        int z = (random()%(24 * 16) - (12 * 16));
+        auto& ch = find_chunk(floor(x/16.0f), floor(z/16.0f));
+        int y = ch.height[(rem_euclid(z, 16)*16) + rem_euclid(x, 16)];
+        if (y < 64)
+        {
+            i--;
+            continue;
+        }
+        place_block(x, y, z, 146);
+        place_block(x, y + 1, z, 146);
+        place_block(x, y + 2, z, 146);
+        place_block(x, y + 3, z, 146);
+        place_block(x + 1, y + 3, z, 146);
+        place_block(x + 2, y + 3, z, 146);
+        place_block(x + 2, y + 4, z, 146);
+        place_block(x + 2, y + 5, z, 146);
+        int diff = 4;
+        int diff2 = 0;
+        for (int i = y + 5; i < y + 10;i++)
+        {
+            if (i == y + 7)
+            {
+                diff++;
+                diff2--;
+            }
+            if (i == y + 8)
+            {
+                diff--;
+                diff2++;
+            }
+            if (i == y + 9)
+            {
+                diff--;
+                diff2++;
+            }
+            for (int ii = (z - 2) + diff2; ii < z + diff; ii++)
+            {
+                for (int iii = x + diff2; iii < x + (diff + 2); iii++)
+                {
+                    int r = random()%100;
+                    if (r < 80)
+                        place_block(iii, i, ii, 404);
+                }
+            }
+        }
+    }
+    
     log("world created", INFO);
     std::ifstream f("items.json");
     items = json::parse(f);
