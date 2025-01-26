@@ -1224,9 +1224,17 @@ void recv_thread()
                 }
 
                 minecraft::varint lenght = read_varint(buff.data);
+                int index = status;
+                int status2 = 0;
                 status -= lenght.size;
-                while (status < lenght.num)
-                    status += recv(current_fd, &buff.data[4], lenght.num - (4 - lenght.size), 0);
+                while (status < lenght.num && status < 4096)
+                {
+                    status2 = recv(current_fd, &buff.data[index], lenght.num - (4 - lenght.size), 0);
+                    if (status2 == -1 || status2 == 0)
+                        disconnect_user(current_fd);
+                    index += status2;
+                    status+= status2;
+                }
                 packets.push_back(process_packet(&buff, current_fd, status));
                 int remaining_count;
                 ioctl(current_fd, FIONREAD, &remaining_count);
