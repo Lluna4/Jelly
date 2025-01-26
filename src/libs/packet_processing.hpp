@@ -16,15 +16,16 @@
 
 
 
-packet process_packet(char_size *pkt, int sock, int status)
+std::vector<packet> process_packet(char_size *pkt, int sock, int status)
 {
 	int lenght = 0;
 	char *next = NULL;
+    std::vector<packet> packets;
 	struct packet p = {0};
 	char *data = NULL;
 	p.id = 0;
 	if (*(pkt->start_data) == '\0')
-		return p;
+		return packets;
 	std::tuple<minecraft::varint, minecraft::varint> header;
 	header = read_packet(header, pkt->start_data);
 	if (std::get<0>(header).num > status)
@@ -42,5 +43,6 @@ packet process_packet(char_size *pkt, int sock, int status)
 	p.size = std::get<0>(header).num;
 	p.start_data = p.data;
 	p.sock = sock;
-    return p;
+	packets.push_back(p);
+    return packets;
 }

@@ -1227,7 +1227,7 @@ void recv_thread()
                 status -= lenght.size;
                 while (status < lenght.num)
                     status += recv(current_fd, &buff.data[4], lenght.num - (4 - lenght.size), 0);
-                packets.push_back(process_packet(&buff, current_fd, status));
+                packets = process_packet(&buff, current_fd, status);
                 int remaining_count;
                 ioctl(current_fd, FIONREAD, &remaining_count);
                 log(remaining_count, INFO);
