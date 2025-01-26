@@ -5,7 +5,6 @@
 #include <map>
 #include "utils.hpp"
 #include "PerlinNoise.hpp"
-#include <stdlib.h>
 
 enum palette_type
 {
@@ -14,7 +13,6 @@ enum palette_type
 	DIRECT
 };
 bool LIGHT_POSTPROCESSING = true;
-unsigned int s = 0;
 
 struct dot
 {
@@ -59,7 +57,7 @@ namespace minecraft
 			if (bpe == 0)
 			{
 				type = SINGLE_VALUED;
-				value = 5;
+				value = val;
 				data_size = varint(0);
 				data = std::make_unique<char []>(1);
 				data[0] = 0;
@@ -78,7 +76,6 @@ namespace minecraft
 					else 
 						memset(data.get(), 0, 4096);
 					data_size = varint(512);
-					
 				}
 			}
 		}
@@ -88,7 +85,6 @@ namespace minecraft
 		std::vector<varint> palette;
 		varint data_size;
 		std::shared_ptr<char[]> data;
-		
 	};
 	char_size calc_light(minecraft::paletted_container data)
 	{
@@ -232,7 +228,6 @@ namespace minecraft
 			{
 				sections.emplace_back(false, true, palette);
 			}
-			height.resize(16 * 16);
 		}
 
 		void place_block(int x, int y, int z, int block_id)
@@ -272,7 +267,6 @@ namespace minecraft
 		int x;
 		int z;
 		std::vector<chunk_section> sections;
-		std::vector<int> height;
 	};
 };
 
@@ -288,11 +282,11 @@ namespace std {
 
 std::unordered_map<std::pair<int, int>, minecraft::chunk> chunks;
 
-minecraft::chunk &find_chunk(int x, int z)
+minecraft::chunk find_chunk(int x, int z)
 {
 	if (chunks.find({x, z}) == chunks.end()) //if it doesnt find a chunk it generates one
 	{
-		const siv::PerlinNoise::seed_type seed = s;
+		const siv::PerlinNoise::seed_type seed = 2907u;
 
 		const siv::PerlinNoise perlin{ seed };
  	 	chunks.emplace(std::piecewise_construct,
@@ -318,21 +312,14 @@ minecraft::chunk &find_chunk(int x, int z)
 					}
 				}
 				//log(height_, INFO);
-				chunk.height[(z_*16) + x_] = height_;
 				for (int y = 0; y < height_; y++)
 				{
 					if (y == height_ - 1)
 					{
-						chunk.place_block(x_, y, z_, 9);
-						int randomnumber = random()%10;
-						if (randomnumber < 3)
-						{
-							chunk.place_block(x_, y + 1, z_, 2005);
-						}
-						else if (randomnumber > 9)
-						{
-							chunk.place_block(x_, y + 1, z_, 10756);
-						}
+						if (noise > 0.6)
+							chunk.place_block(x_, y, z_, 8);
+						else
+							chunk.place_block(x_, y, z_, 9);
 					}
 					else
 						chunk.place_block(x_, y, z_, 10);
