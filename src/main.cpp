@@ -1212,28 +1212,16 @@ void recv_thread()
         for (int i = 0; i < events_ready;i++)
         {
             int current_fd = events[i].data.fd;
-            std::vector<packet> packets;
-            while (true)
+            int status = recv(current_fd, buff.data, 1024, 0);
+            buff.data += status;
+            //log("status: ", status);
+            if (status == -1 || status == 0)
             {
-                int status = recv(current_fd, buff.data, 4, 0);
-                buff.start_data = buff.data;
-                //log("status: ", status);
-                if (status == -1 || status == 0)
-                {
-                    disconnect_user(current_fd);
-                }
-
-                minecraft::varint lenght = read_varint(buff.data);
-                status -= lenght.size;
-                while (status < lenght.num)
-                    status += recv(current_fd, &buff.data[4], lenght.num - (4 - lenght.size), 0);
-                packets = process_packet(&buff, current_fd, status);
-                int remaining_count;
-                ioctl(current_fd, FIONREAD, &remaining_count);
-                log(remaining_count, INFO);
-                if (remaining_count == 0)
-                    break;
+                disconnect_user(current_fd);
             }
+
+            
+            std::vector<packet> packets = process_packet(&buff, current_fd, status);
             //log("read ", packets.size(), " packets");
             for (auto pack: packets)
             {
@@ -1379,7 +1367,7 @@ int main(int argc, char *argv[])
         update_keep_alive();
         time_ticks++;
         const ms duration = clock::now() - before;
-        //log(std::format("MSPT {}ms", duration.count()), INFO);
+        log(std::format("MSPT {}ms", duration.count()), INFO);
         if (duration.count() <= 50)
             std::this_thread::sleep_for(std::chrono::milliseconds(50) - duration);
     }
