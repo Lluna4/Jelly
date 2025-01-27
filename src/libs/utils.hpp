@@ -267,6 +267,11 @@ namespace minecraft
 		}
 		unsigned long size;
 		unsigned long num;
+
+		bool operator==(const varint &other)
+		const {
+			return other.num == num;	
+		}
 	};
 
 	struct signed_varint

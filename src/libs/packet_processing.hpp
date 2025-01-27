@@ -16,33 +16,21 @@
 
 
 
-std::vector<packet> process_packet(char_size *pkt, int sock, int status)
+packet process_packet(char_size *pkt, int sock, int status)
 {
 	int lenght = 0;
 	char *next = NULL;
-    std::vector<packet> packets;
 	struct packet p = {0};
 	char *data = NULL;
 	p.id = 0;
 	if (*(pkt->start_data) == '\0')
-		return packets;
+		return p;
 	std::tuple<minecraft::varint, minecraft::varint> header;
 	header = read_packet(header, pkt->start_data);
-	if (std::get<0>(header).num > status)
-	{
-		if (std::get<0>(header).num + pkt->consumed_size > pkt->max_size)
-		{
-			pkt->start_data = (char *)realloc(pkt->start_data, pkt->max_size + std::get<0>(header).num + pkt->consumed_size + 1024);
-			pkt->max_size += std::get<0>(header).num + pkt->consumed_size + 1024;
-			pkt->data = pkt->start_data + pkt->consumed_size;
-		}
-		recv(sock, pkt->data, std::get<0>(header).num - status, 0);
-	}
 	p.data = mem_dup(&(pkt->start_data[std::get<0>(header).size + std::get<1>(header).size]), std::get<0>(header).num);
 	p.id = std::get<1>(header).num;
 	p.size = std::get<0>(header).num;
 	p.start_data = p.data;
 	p.sock = sock;
-	packets.push_back(p);
-    return packets;
+    return p;
 }

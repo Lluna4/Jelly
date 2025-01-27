@@ -26,10 +26,6 @@ using login_play = std::tuple<
 using chunk_data_light = std::tuple<minecraft::varint, int, int, char, char, minecraft::chunk,
                                     minecraft::varint, minecraft::varint,long, minecraft::varint, long, 
                                     minecraft::varint, long, minecraft::varint, long, minecraft::varint, 
-                                    std::tuple<minecraft::varint, char_size>,
-                                    std::tuple<minecraft::varint, char_size>,
-                                    std::tuple<minecraft::varint, char_size>,
-                                    std::tuple<minecraft::varint, char_size>,
                                     minecraft::varint>;
 
 using json = nlohmann::json;
@@ -496,10 +492,8 @@ void send_chunk(User user, int x, int z)
     chunk_data_light chunk_data = 
     {
         minecraft::varint(0x27), x, z, 0x0a, 0x0, chunk,
-        minecraft::varint(0), minecraft::varint(1), sky_light_mask, minecraft::varint(1), block_light_mask, 
-        minecraft::varint(1), empty_sky_light_mask, minecraft::varint(1), empty_block_light_mask, minecraft::varint(4),
-        {minecraft::varint(2048), sky_data_1},{minecraft::varint(2048), sky_data_2},
-        {minecraft::varint(2048), sky_data_3},{minecraft::varint(2048), sky_data_4},
+        minecraft::varint(0), minecraft::varint(1), (long)0, minecraft::varint(1), (long)0, 
+        minecraft::varint(1), (long)0, minecraft::varint(1), (long)0, minecraft::varint(0),
         minecraft::varint(0)
     };
     send_packet(chunk_data, user.sockfd); 
@@ -573,47 +567,11 @@ void system_chat(message_locale msg)
 
 void place_block(std::int32_t x, std::int32_t y, std::int32_t z, int block_id)
 {
-    float chunk_pos_x = floor(x/16.0f);
-    float chunk_pos_z = floor(z/16.0f);
-    minecraft::chunk placed_chunk = find_chunk((int)chunk_pos_x, (int)chunk_pos_z);
-    int section = (y + 64)/16;
-    int in_chunk_x = rem_euclid(x, 16);
-    int in_chunk_y = rem_euclid(y, 16);
-    int in_chunk_z = rem_euclid(z, 16);
-    if (placed_chunk.sections[section].blocks.type == SINGLE_VALUED)
-    {
-        placed_chunk.sections[section].blocks = minecraft::paletted_container(8, true, 0, {minecraft::varint(9), minecraft::varint(0), minecraft::varint(block_id)});
-        placed_chunk.sections[section].blocks.data[(in_chunk_y*256) + (in_chunk_z*16) + in_chunk_x] = 2;
-        placed_chunk.sections[section].block_count = 1;
-        log("placed block");
-    }
-    else if (placed_chunk.sections[section].blocks.type == INDIRECT)
-    {
-        int index = -1;
-        for (int i = 0; i < placed_chunk.sections[section].blocks.palette.size();i++)
-        {
-            if (placed_chunk.sections[section].blocks.palette[i].num == block_id)
-            {
-                index = i;
-                break;
-            }
-        }
-        log("index is ", index);
-        if (index == -1)
-        {
-            placed_chunk.sections[section].blocks.palette.emplace_back(block_id);
-            placed_chunk.sections[section].blocks.data[(((rem_euclid(y, 16)))*256) + (abs(rem_euclid(z, 16))*16) + abs(rem_euclid(x, 16))] = placed_chunk.sections[section].blocks.palette.size() - 1;
-            placed_chunk.sections[section].block_count += 1;
-        }
-        else
-        {
-            placed_chunk.sections[section].blocks.data[(((rem_euclid(y, 16)))*256) + (abs(rem_euclid(z, 16))*16) + abs(rem_euclid(x, 16))] = index;
-            placed_chunk.sections[section].block_count += 1; 
-        }
-    }
-    chunks.find({chunk_pos_x, chunk_pos_z})->second = placed_chunk;
-    placed_chunk.sections[section].light = minecraft::calc_light(placed_chunk.sections[section].blocks);
-    log(std::format("Placed {} in chunk {}, {}, section {} in x {} y {} z {}",block_id ,chunk_pos_x, chunk_pos_z, (y + 64)/16 ,rem_euclid(x, 16), rem_euclid(y, 16), rem_euclid(z, 16)));
+	int ch_x = floor(x/16);
+	int ch_z = floor(z/16);
+	minecraft::chunk &chunk = find_chunk(ch_x, ch_z);
+
+	chunk.place_block(rem_euclid(x, 16), y, rem_euclid(z, 16), block_id);
 }
 
 
@@ -1232,8 +1190,8 @@ void recv_thread()
 {
     int events_ready = 0;
     epoll_event events[1024];
-    char *main_buffer = (char *)calloc(4096, sizeof(char));
-    char_size buff = {.data = main_buffer, .consumed_size = 0, .max_size = 4096, .start_data = main_buffer};
+    char *main_buffer = (char *)calloc(8096, sizeof(char));
+    char_size buff = {.data = main_buffer, .consumed_size = 0, .max_size = 8096, .start_data = main_buffer};
 
     while (true)
     {
@@ -1244,16 +1202,44 @@ void recv_thread()
         for (int i = 0; i < events_ready;i++)
         {
             int current_fd = events[i].data.fd;
-            int status = recv(current_fd, buff.data, 1024, 0);
-            buff.data += status;
-            //log("status: ", status);
-            if (status == -1 || status == 0)
+            std::vector<packet> packets;
+            while (true)
             {
-                disconnect_user(current_fd);
-            }
+                int status = recv(current_fd, buff.data, 4, 0);
+                buff.start_data = buff.data;
+                //log("status: ", status);
+                if (status == -1 || status == 0)
+                {
+                    disconnect_user(current_fd);
+                    break;
+                }
 
-            
-            std::vector<packet> packets = process_packet(&buff, current_fd, status);
+                minecraft::varint lenght = read_varint(buff.data);
+                int index = status;
+                int status2 = 1;
+                status -= lenght.size;
+                while (status < lenght.num && status < 8096)
+                {
+                    status2 = recv(current_fd, &buff.data[index], lenght.num - (4 - lenght.size), 0);
+                    if (status2 == -1 || status2 == 0)
+                    {
+                        disconnect_user(current_fd);
+                        break;
+                    }
+                    index += status2;
+                    status+= status2;
+                }
+                if (status2 == -1 || status2 == 0)
+                {
+                    break;
+                }
+                packets.push_back(process_packet(&buff, current_fd, status));
+                int remaining_count;
+                ioctl(current_fd, FIONREAD, &remaining_count);
+                log(remaining_count, INFO);
+                if (remaining_count == 0)
+                    break;
+            }
             //log("read ", packets.size(), " packets");
             for (auto pack: packets)
             {
@@ -1285,6 +1271,8 @@ int main(int argc, char *argv[])
         log("Config file created!", INFO);
     }
     load_config();
+    srandom(time(NULL));
+    s = random();
     int sock = netlib::init_server(SV_IP, SV_PORT);
     if (sock == -1)
     {

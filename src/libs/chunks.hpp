@@ -13,6 +13,7 @@ enum palette_type
 	DIRECT
 };
 bool LIGHT_POSTPROCESSING = true;
+unsigned int s = 0;
 
 struct dot
 {
@@ -32,6 +33,12 @@ struct dot
 		return (n * (noise - start_noise) + start_height);
 	}
 };
+
+struct position_int
+{
+	int x, y, z;
+};
+
 
 std::map<double, dot> t_map = {{-1.0, dot(30, 64, -1.0, -0.1)}, {-0.1, dot(64, 75, -0.1, 0.4)}, {0.4, dot(75, 90, 0.4, 0.6)},
 								{0.6, dot(90, 100, 0.6, 0.8)}, {0.8, dot(100, 130, 0.8, 0.9)}, {0.9, dot(130, 140, 0.9, 1.0)}};
@@ -71,10 +78,6 @@ namespace minecraft
 					data = std::make_shared<char []>(4097);
 					if (data == NULL)
 						std::runtime_error("Malloc failed");
-					if (palette.size() > 1)
-						memset(data.get(), 1, 4096);
-					else 
-						memset(data.get(), 0, 4096);
 					data_size = varint(512);
 				}
 			}
@@ -193,16 +196,12 @@ namespace minecraft
 				block_count = 4096;
 				blocks = paletted_container(8, true, 0, palette);
 				biome = paletted_container(0, false);
-				if (lighting == true)
-					light = calc_light(blocks);
 			}
 			else
 			{
 				block_count = 0;
 				blocks = paletted_container(0, true);
 				biome = paletted_container(0, false);
-				if (lighting == true)
-					light = calc_light(blocks);
 			}
 		}
 		short block_count;
@@ -230,43 +229,40 @@ namespace minecraft
 			}
 		}
 
-		void place_block(int x, int y, int z, int block_id)
+		void place_block(int x, int y, int z, minecraft::varint block_id)
 		{
-			int section = (y + 64)/16;
-			int in_chunk_y = rem_euclid(y, 16);
-			if (sections[section].blocks.type == SINGLE_VALUED)
+			int section_index = (y + 64)/16;
+			int index = 0;
+			if (sections[section_index].blocks.type == SINGLE_VALUED)
 			{
-				sections[section].blocks = minecraft::paletted_container(8, true, 0, {minecraft::varint(9), minecraft::varint(0), minecraft::varint(block_id)});
-				sections[section].blocks.data[(in_chunk_y*256) + (z*16) + x] = 2;
-				sections[section].block_count = 1;
+				sections[section_index].blocks = paletted_container(8, true, 0, {minecraft::varint(0), minecraft::varint(block_id)});
+				index = 1;
 			}
-			else if (sections[section].blocks.type == INDIRECT)
+			else if (sections[section_index].blocks.type == INDIRECT)
 			{
-				int index = -1;
-				for (int i = 0; i < sections[section].blocks.palette.size();i++)
+				bool found = false;
+				for (int i = 0; i < sections[section_index].blocks.palette.size(); i++)
 				{
-					if (sections[section].blocks.palette[i].num == block_id)
+					if (sections[section_index].blocks.palette[i] == block_id)
 					{
 						index = i;
+						found = true;
 						break;
 					}
 				}
-				if (index == -1)
+				if (found == false)
 				{
-					sections[section].blocks.palette.emplace_back(block_id);
-					sections[section].blocks.data[(in_chunk_y*256) + (z*16) + x] = sections[section].blocks.palette.size() - 1;
-					sections[section].block_count += 1;
-				}
-				else
-				{
-					sections[section].blocks.data[(in_chunk_y*256) + (z*16) + x] = index;
-					sections[section].block_count += 1; 
+					index = sections[section_index].blocks.palette.size();
+					sections[section_index].blocks.palette.push_back(block_id);
 				}
 			}
+			sections[section_index].blocks.data[(rem_euclid(y, 16)*256) + (z*16) + x] = index;
+			sections[section_index].block_count += 1;
 		}
 		int x;
 		int z;
 		std::vector<chunk_section> sections;
+		std::vector<position_int> trees;
 	};
 };
 
@@ -282,11 +278,11 @@ namespace std {
 
 std::unordered_map<std::pair<int, int>, minecraft::chunk> chunks;
 
-minecraft::chunk find_chunk(int x, int z)
+minecraft::chunk &find_chunk(int x, int z)
 {
 	if (chunks.find({x, z}) == chunks.end()) //if it doesnt find a chunk it generates one
 	{
-		const siv::PerlinNoise::seed_type seed = 2907u;
+		const siv::PerlinNoise::seed_type seed = s;
 
 		const siv::PerlinNoise perlin{ seed };
  	 	chunks.emplace(std::piecewise_construct,
@@ -316,10 +312,21 @@ minecraft::chunk find_chunk(int x, int z)
 				{
 					if (y == height_ - 1)
 					{
-						if (noise > 0.6)
-							chunk.place_block(x_, y, z_, 8);
-						else
-							chunk.place_block(x_, y, z_, 9);
+						chunk.place_block(x_, y, z_, 9);
+						int randomnumber = random()%10;
+						int random2 = random()%1000;
+						if (random2 > 995)
+						{
+							chunk.trees.emplace_back(x_ +(x * 16), height_, z_ + (z * 16));
+						}
+						if (randomnumber < 3)
+						{
+							chunk.place_block(x_, y + 1, z_, 2005);
+						}
+						else if (randomnumber > 9)
+						{
+							chunk.place_block(x_, y + 1, z_, 10756);
+						}
 					}
 					else
 						chunk.place_block(x_, y, z_, 10);
