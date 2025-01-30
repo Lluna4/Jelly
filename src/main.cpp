@@ -11,7 +11,7 @@
 #include <math.h>
 #include "libs/comp_time_write.hpp"
 #include "libs/comp_time_read.hpp"
-#include "libs/chunks.hpp"
+#include "libs/chunks2.hpp"
 #include "libs/tokenize.hpp"
 #include "libs/config.hpp"
 
@@ -23,7 +23,7 @@ using login_play = std::tuple<
                 minecraft::varint, minecraft::string, long,
                 unsigned char, char, bool, bool, bool, minecraft::varint, bool>;
 
-using chunk_data_light = std::tuple<minecraft::varint, int, int, char, char, minecraft::chunk,
+using chunk_data_light = std::tuple<minecraft::varint, int, int, char, char, chunk,
                                     minecraft::varint, minecraft::varint,long, minecraft::varint, long, 
                                     minecraft::varint, long, minecraft::varint, long, minecraft::varint, 
                                     minecraft::varint>;
@@ -49,6 +49,7 @@ struct position
 
 long time_ticks = 0;
 int connected_users = 0;
+world World;
 
 struct chunk_pos_
 {
@@ -463,35 +464,10 @@ bool check_collision(position player, position block)
 
 void send_chunk(User user, int x, int z)
 {
-    minecraft::chunk chunk = find_chunk(x, z);
-    long sky_light_mask = 0;
-    std::bitset<64> b(sky_light_mask);
-    b[8] = 1;
-    b[9] = 1;
-    b[10] = 1;
-    b[11] = 1;
-    sky_light_mask = b.to_ulong();
-    std::cout << b << std::endl;
-    long block_light_mask = 0;
-    long empty_sky_light_mask = 0;
-    empty_sky_light_mask = flipBits(empty_sky_light_mask);
-    std::bitset<64> c(empty_sky_light_mask);
-    c[8] = 0;
-    c[9] = 0;
-    c[10] = 0;
-    c[11] = 0;
-    empty_sky_light_mask = c.to_ulong();
-    std::cout << c << std::endl;
-    long empty_block_light_mask = 0;
-    empty_block_light_mask = flipBits(empty_sky_light_mask);
-
-    char_size sky_data_1 = chunk.sections[7].light;
-    char_size sky_data_2 = chunk.sections[8].light;
-    char_size sky_data_3 = chunk.sections[9].light;
-    char_size sky_data_4 = chunk.sections[10].light;
+    chunk Chunk = World.generate_chunk(x, z);
     chunk_data_light chunk_data = 
     {
-        minecraft::varint(0x27), x, z, 0x0a, 0x0, chunk,
+        minecraft::varint(0x27), x, z, 0x0a, 0x0, Chunk,
         minecraft::varint(0), minecraft::varint(1), (long)0, minecraft::varint(1), (long)0, 
         minecraft::varint(1), (long)0, minecraft::varint(1), (long)0, minecraft::varint(0),
         minecraft::varint(0)
@@ -567,11 +543,7 @@ void system_chat(message_locale msg)
 
 void place_block(std::int32_t x, std::int32_t y, std::int32_t z, int block_id)
 {
-	int ch_x = floor(x/16);
-	int ch_z = floor(z/16);
-	minecraft::chunk &chunk = find_chunk(ch_x, ch_z);
-
-	chunk.place_block(rem_euclid(x, 16), y, rem_euclid(z, 16), block_id);
+    World.place_block(x, y, z, minecraft::varint(block_id));
 }
 
 
@@ -1064,6 +1036,7 @@ void execute_packet(packet pkt, User &user)
                 };
                 if (user.loading == false)
                     send_packet(awk_block, user.sockfd);
+                World.place_block(x, y, z, minecraft::varint(0));
             }
             log("Removed block");
         }
@@ -1129,10 +1102,10 @@ void execute_packet(packet pkt, User &user)
             std::tuple<minecraft::varint, long, minecraft::varint, float, float, float, bool, minecraft::varint> use_item_on;
             use_item_on = read_packet(use_item_on, pkt.data);
             long val = std::get<1>(use_item_on);
-            std::int32_t x = val >> 38;
-            std::int32_t y = val << 52 >> 52;
-            std::int32_t z = val << 26 >> 38;
-            log(std::format("x {} y {} z {}", x, y, z));
+            int x = val >> 38;
+            int y = val << 52 >> 52;
+            int z = val << 26 >> 38;
+            
             minecraft::varint face = std::get<2>(use_item_on);
             if (face.num == 0)
                 y--;
@@ -1153,13 +1126,14 @@ void execute_packet(packet pkt, User &user)
                 {
                     if (check_collision(us.second.pos, (position){.x = (double)x, .y = (double)y, .z = (double)z}) == true)
                     {
-                        log("Block collides with player!");
+                        log("Block collides with player!", INFO);
 		                return;
                     }
                 }
             }
+            log(std::format("x {} y {} z {}", x, y, z), INFO);
             log(std::format("Placed block {} in position {}",user.inventory[user.selected_inv], user.selected_inv));
-            place_block(x, y, z, user.inventory[user.selected_inv]);
+            World.place_block(x, y, z, minecraft::varint(user.inventory[user.selected_inv]));
             unsigned char anim = 0;
             if (std::get<0>(use_item_on).num == 1)
                 anim = 3;
@@ -1190,56 +1164,28 @@ void recv_thread()
 {
     int events_ready = 0;
     epoll_event events[1024];
-    char *main_buffer = (char *)calloc(8096, sizeof(char));
-    char_size buff = {.data = main_buffer, .consumed_size = 0, .max_size = 8096, .start_data = main_buffer};
+    char *main_buffer = (char *)calloc(4096, sizeof(char));
+    char_size buff = {.data = main_buffer, .consumed_size = 0, .max_size = 4096, .start_data = main_buffer};
 
     while (true)
     {
         events_ready = epoll_wait(epfd, events, 1024, -1);
         if (events_ready == -1)
-            log(std::format("Error! {}", strerror(errno)), ERROR);
+            log(std::format("Error! {}", strerror(errno)), INFO);
         //log("Events ready ", events_ready);
         for (int i = 0; i < events_ready;i++)
         {
             int current_fd = events[i].data.fd;
-            std::vector<packet> packets;
-            while (true)
+            int status = recv(current_fd, buff.data, 1024, 0);
+            buff.data += status;
+            //log("status: ", status);
+            if (status == -1 || status == 0)
             {
-                int status = recv(current_fd, buff.data, 4, 0);
-                buff.start_data = buff.data;
-                //log("status: ", status);
-                if (status == -1 || status == 0)
-                {
-                    disconnect_user(current_fd);
-                    break;
-                }
-
-                minecraft::varint lenght = read_varint(buff.data);
-                int index = status;
-                int status2 = 1;
-                status -= lenght.size;
-                while (status < lenght.num && status < 8096)
-                {
-                    status2 = recv(current_fd, &buff.data[index], lenght.num - (4 - lenght.size), 0);
-                    if (status2 == -1 || status2 == 0)
-                    {
-                        disconnect_user(current_fd);
-                        break;
-                    }
-                    index += status2;
-                    status+= status2;
-                }
-                if (status2 == -1 || status2 == 0)
-                {
-                    break;
-                }
-                packets.push_back(process_packet(&buff, current_fd, status));
-                int remaining_count;
-                ioctl(current_fd, FIONREAD, &remaining_count);
-                log(remaining_count, INFO);
-                if (remaining_count == 0)
-                    break;
+                disconnect_user(current_fd);
             }
+
+            
+            std::vector<packet> packets = process_packet(&buff, current_fd, status);
             //log("read ", packets.size(), " packets");
             for (auto pack: packets)
             {
@@ -1258,11 +1204,6 @@ void recv_thread()
 
 int main(int argc, char *argv[])
 {
-    if (argc > 1)
-    {
-        if (strcmp(argv[1], "-no_light_postprocessing") == 0)
-            LIGHT_POSTPROCESSING = false;
-    }
     using clock = std::chrono::system_clock;
     using ms = std::chrono::duration<double, std::milli>;
     if (std::filesystem::exists("server.properties") == false)
@@ -1292,11 +1233,12 @@ int main(int argc, char *argv[])
     accept_t.detach();
     std::thread read_t(recv_thread);
     read_t.detach();
-    for (int y = -12; y < 12; y++)
+    
+    for (int z = -12; z < 12; z++)
     {
         for (int x = -12; x < 12; x++)
         {
-            find_chunk(x, y);	
+            World.generate_chunk(x, z);
         }
     }
     log("world created", INFO);
@@ -1334,7 +1276,7 @@ int main(int argc, char *argv[])
         update_keep_alive();
         time_ticks++;
         const ms duration = clock::now() - before;
-        log(std::format("MSPT {}ms", duration.count()), INFO);
+        //log(std::format("MSPT {}ms", duration.count()), INFO);
         if (duration.count() <= 50)
             std::this_thread::sleep_for(std::chrono::milliseconds(50) - duration);
     }

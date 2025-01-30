@@ -5,7 +5,7 @@
 #include <tuple>
 #include <bitset>
 #include "utils.hpp"
-#include "chunks.hpp"
+#include "chunks2.hpp"
 
 #define write_comp_pkt(size, ptr, t) const_for<size>([&](auto i){write_var<std::tuple_element_t<i.value, decltype(t)>>::call(&ptr, std::get<i.value>(t));});
 
@@ -221,95 +221,49 @@ struct write_var<minecraft::uuid>
 };
 
 template<>
-struct write_var<minecraft::chunk>
+struct write_var<chunk>
 {
-    static void call(char_size *v, minecraft::chunk value)
+    static void call(char_size *v, chunk value)
     {
-        char *serialised_chunk = (char *)malloc(50000 * sizeof(char));
-        char_size a = {.data = serialised_chunk, .consumed_size = 0, .max_size = 50000, .start_data = serialised_chunk};
-        for (int i = 0; i < value.sections.size(); i++)
-        {
-            if (value.sections[i].blocks.type == SINGLE_VALUED)
-            {
-                std::tuple<short, unsigned char, minecraft::varint, minecraft::varint, char_size> data
-                {
-                    value.sections[i].block_count, value.sections[i].blocks.bits_per_entry,
-                    value.sections[i].blocks.value, value.sections[i].blocks.data_size,
-                    (char_size){.data = value.sections[i].blocks.data.get(), .consumed_size = 0,
-                        .max_size = 1, .start_data = value.sections[i].blocks.data.get()}
-                };
-                constexpr std::size_t size = std::tuple_size_v<decltype(data)>;
-                
-                write_comp_pkt(size, a, data);
-            }
-            else if (value.sections[i].blocks.type == INDIRECT)
-            {
-                std::tuple<short, unsigned char, minecraft::varint, std::vector<minecraft::varint>, minecraft::varint> data
-                {
-                    value.sections[i].block_count, value.sections[i].blocks.bits_per_entry,
-                    minecraft::varint(value.sections[i].blocks.palette.size()), value.sections[i].blocks.palette,
-                    value.sections[i].blocks.data_size
-                };
-                constexpr std::size_t size = std::tuple_size_v<decltype(data)>;
-               
-                write_comp_pkt(size, a, data);
-                char *long_dat = (char *)calloc(9, sizeof(char));
-                char long_index = 0;
-                for (int x = 0; x < 4096; x++)
-                {
-                    if (long_index == 8)
-                    {
-                        long new_long = 0;
-                        std::memcpy(&new_long, long_dat, sizeof(long));
-                        std::tuple<long> long_enc = {new_long};
-                        constexpr std::size_t size_ = std::tuple_size_v<decltype(long_enc)>;
-                        write_comp_pkt(size_, a, long_enc);
-                        memset(long_dat, 0, sizeof(long));
-                        long_index = 0;
-                    }
-                    long_dat[long_index] = value.sections[i].blocks.data[x];
-                    long_index++;
-                }
-                long new_long = 0;
-                std::memcpy(&new_long, long_dat, sizeof(long));
-                std::tuple<long> long_enc = {new_long};
-                constexpr std::size_t size_ = std::tuple_size_v<decltype(long_enc)>;
-                write_comp_pkt(size_, a, long_enc);
-                free(long_dat);
-            }
-            if (value.sections[i].biome.type == SINGLE_VALUED)
-            {
-                std::tuple<unsigned char, minecraft::varint, minecraft::varint, char_size> data
-                {
-                    value.sections[i].biome.bits_per_entry,
-                    value.sections[i].biome.value, value.sections[i].biome.data_size,
-                    (char_size){.data = value.sections[i].biome.data.get(), .consumed_size = 0,
-                        .max_size = 1, .start_data = value.sections[i].biome.data.get()}
-                };
-                constexpr std::size_t size = std::tuple_size_v<decltype(data)>;
-                
-                write_comp_pkt(size, a, data);
-            }
-            else if (value.sections[i].biome.type == INDIRECT)
-            {
-                std::tuple<unsigned char, minecraft::varint, std::vector<minecraft::varint>, minecraft::varint, char_size> data
-                {
-                    value.sections[i].biome.bits_per_entry,minecraft::varint(value.sections[i].biome.palette.size()), 
-                    value.sections[i].biome.palette,value.sections[i].biome.data_size,(char_size){.data = value.sections[i].biome.data.get(), 
-                    .consumed_size = (int)value.sections[i].biome.data_size.num * 8,
-                        .max_size = (int)value.sections[i].biome.data_size.num * 8 + 1, .start_data = value.sections[i].biome.data.get()}
-                };
-                constexpr std::size_t size = std::tuple_size_v<decltype(data)>;
-               
-                write_comp_pkt(size, a, data);
-            }
-        }
+        char *serialised_chunk = (char *)malloc(60000 * sizeof(char));
+        char_size a = {.data = serialised_chunk, .consumed_size = 0, .max_size = 60000, .start_data = serialised_chunk};
+		for (auto Section: value.sections)
+		{
+            std::vector<long> data;
+			for (int y = 0; y < 16; y++)
+	   		{
+				for (int z = 0; z < 16; z++)
+				{
+					std::vector<unsigned char> temp_long;
+					for (int x = 0; x < 16; x++)
+					{
+                        temp_long.push_back(Section.blocks[y][z][x]);
+						if ((x == 7 || x == 15) && x != 0)
+						{
+							long new_long = 0;
+							memcpy(&new_long, temp_long.data(), sizeof(long));
+							temp_long.clear();
+							data.push_back(new_long);
+						}
+					}
+				}
+			}
+            //log(std::format("Section {} Block count {}", Section.position, Section.block_count), INFO);
+			auto data_to_write = std::make_tuple(Section.block_count, (unsigned char)8, minecraft::varint(Section.palette.size()),
+												 Section.palette, minecraft::varint(data.size()), data);
+			constexpr std::size_t size = std::tuple_size_v<decltype(data_to_write)>;
+			write_comp_pkt(size, a, data_to_write);
+			auto biome_to_write = std::make_tuple((unsigned char)0, minecraft::varint(5), minecraft::varint(0));
+			constexpr std::size_t size2 = std::tuple_size_v<decltype(biome_to_write)>;
+			write_comp_pkt(size2, a, biome_to_write);
+	   	}
         if (v->consumed_size >= v->max_size || v->consumed_size + a.consumed_size >= v->max_size)
         {
             v->start_data = (char *)realloc(v->start_data, v->consumed_size + a.consumed_size + 1024);
             v->max_size = v->consumed_size + a.consumed_size + 1024;
             v->data = v->start_data + v->consumed_size;
         }
+        log("consumed size {}", a.consumed_size);
         std::tuple<minecraft::varint> chunk =
         {
             minecraft::varint(a.consumed_size), 

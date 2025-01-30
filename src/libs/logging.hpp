@@ -4,6 +4,7 @@
 #include <print>
 #include <iostream>
 #include <chrono>
+#include <fstream>
 #if __has_include (<format>) && __cplusplus >= 202002L
 	#include <format>
 #else
