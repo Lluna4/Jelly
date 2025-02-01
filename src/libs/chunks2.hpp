@@ -53,22 +53,40 @@ namespace std
 
 struct section
 {
-	section(int pos)
-	:position(pos)
+	section(int pos, bool single_value = false, minecraft::varint value = 0)
+	:position(pos),single_val(single_value) ,val(value)
 	{
-		blocks.resize(16);
-		for (auto &z: blocks)
+		if (single_value == false)
 		{
-			z.resize(16);
-			for (auto &x: z)
+			blocks.resize(16);
+			for (auto &z: blocks)
 			{
-				x.resize(16);
+				z.resize(16);
+				for (auto &x: z)
+				{
+					x.resize(16);
+				}
+			}
+			block_count = 0;
+			//generated = false;
+			palette.push_back(minecraft::varint(0));
+		}
+		else
+		{
+			palette.push_back(minecraft::varint(0));
+			if (value != 0)
+			{
+				block_count = 4096;
+				palette.push_back(value);
+			}
+			else
+			{
+				block_count = 0;
 			}
 		}
-		block_count = 0;
-		//generated = false;
-		palette.push_back(minecraft::varint(0));
 	}
+	minecraft::varint val;
+	bool single_val;
 	std::vector<std::vector<std::vector<char>>> blocks;
 	short block_count;
 	//bool generated;
@@ -90,13 +108,62 @@ struct section
 		if (index == -1)
 		{
 			palette.push_back(block_id);
+			if (single_val == true)
+			{
+				blocks.resize(16);
+				for (auto &z: blocks)
+				{
+					z.resize(16);
+					for (auto &x: z)
+					{
+						x.resize(16);
+						if (val != 0)
+							std::fill(x.begin(), x.end(), 1);
+					}
+				}
+				single_val = false;	
+			}
 			blocks[y][z][x] = palette.size() - 1;
 		}
 		else
 		{
+			if (single_val == true)
+			{
+				blocks.resize(16);
+				for (auto &z: blocks)
+				{
+					z.resize(16);
+					for (auto &x: z)
+					{
+						x.resize(16);
+						if (val != 0)
+							std::fill(x.begin(), x.end(), 1);
+					}
+				}
+				single_val = false;
+			}
 			blocks[y][z][x] = index;
 		}
-		block_count++;
+		if (block_id == 0)
+			block_count--;
+		if (block_id != 0)
+			block_count++;
+		if (block_count == 4096)
+		{
+			auto value = blocks[0][0][0];
+			for (auto &z: blocks)
+			{
+				for (auto &x: z)
+				{
+					for (auto block: x)
+					if (value != block)
+						return;
+				}
+			}
+			single_val = true;
+			val = palette[value];
+			blocks.clear();
+		}
 	}
 };
 
@@ -107,7 +174,9 @@ struct chunk
 	{
 		for (int i = 0; i < 24; i++)
 		{
-			sections.emplace_back(i);
+			if (i < 4)
+				sections.emplace_back(i, true, 10);
+			sections.emplace_back(i, true);
 		}
 		generated = false;
 	}
@@ -157,7 +226,7 @@ struct world
 					}
 				}
 				//log(height_, INFO);
-				for (int y = -64; y < height_; y++)
+				for (int y = 16; y < height_; y++)
 				{
 					if (y == height_ - 1)
 					{

@@ -229,33 +229,45 @@ struct write_var<chunk>
         char_size a = {.data = serialised_chunk, .consumed_size = 0, .max_size = 60000, .start_data = serialised_chunk};
 		for (auto Section: value.sections)
 		{
-            std::vector<long> data;
-			for (int y = 0; y < 16; y++)
-	   		{
-				for (int z = 0; z < 16; z++)
-				{
-					std::vector<unsigned char> temp_long;
-					for (int x = 0; x < 16; x++)
-					{
-                        temp_long.push_back(Section.blocks[y][z][x]);
-						if ((x == 7 || x == 15) && x != 0)
-						{
-							long new_long = 0;
-							memcpy(&new_long, temp_long.data(), sizeof(long));
-							temp_long.clear();
-							data.push_back(new_long);
-						}
-					}
-				}
-			}
-            //log(std::format("Section {} Block count {}", Section.position, Section.block_count), INFO);
-			auto data_to_write = std::make_tuple(Section.block_count, (unsigned char)8, minecraft::varint(Section.palette.size()),
-												 Section.palette, minecraft::varint(data.size()), data);
-			constexpr std::size_t size = std::tuple_size_v<decltype(data_to_write)>;
-			write_comp_pkt(size, a, data_to_write);
-			auto biome_to_write = std::make_tuple((unsigned char)0, minecraft::varint(5), minecraft::varint(0));
-			constexpr std::size_t size2 = std::tuple_size_v<decltype(biome_to_write)>;
-			write_comp_pkt(size2, a, biome_to_write);
+            if (Section.single_val == false)
+            {
+                std::vector<long> data;
+                for (int y = 0; y < 16; y++)
+                {
+                    for (int z = 0; z < 16; z++)
+                    {
+                        std::vector<unsigned char> temp_long;
+                        for (int x = 0; x < 16; x++)
+                        {
+                            temp_long.push_back(Section.blocks[y][z][x]);
+                            if ((x == 7 || x == 15) && x != 0)
+                            {
+                                long new_long = 0;
+                                memcpy(&new_long, temp_long.data(), sizeof(long));
+                                temp_long.clear();
+                                data.push_back(new_long);
+                            }
+                        }
+                    }
+                }
+                //log(std::format("Section {} Block count {}", Section.position, Section.block_count), INFO);
+                auto data_to_write = std::make_tuple(Section.block_count, (unsigned char)8, minecraft::varint(Section.palette.size()),
+                                                    Section.palette, minecraft::varint(data.size()), data);
+                constexpr std::size_t size = std::tuple_size_v<decltype(data_to_write)>;
+                write_comp_pkt(size, a, data_to_write);
+                auto biome_to_write = std::make_tuple((unsigned char)0, minecraft::varint(5), minecraft::varint(0));
+                constexpr std::size_t size2 = std::tuple_size_v<decltype(biome_to_write)>;
+                write_comp_pkt(size2, a, biome_to_write);
+            }
+            else
+            {
+                auto data_to_write = std::make_tuple(Section.block_count, (unsigned char)0, minecraft::varint(Section.val), minecraft::varint(0));
+                constexpr std::size_t size = std::tuple_size_v<decltype(data_to_write)>;
+                write_comp_pkt(size, a, data_to_write);
+                auto biome_to_write = std::make_tuple((unsigned char)0, minecraft::varint(5), minecraft::varint(0));
+                constexpr std::size_t size2 = std::tuple_size_v<decltype(biome_to_write)>;
+                write_comp_pkt(size2, a, biome_to_write);
+            }
 	   	}
         if (v->consumed_size >= v->max_size || v->consumed_size + a.consumed_size >= v->max_size)
         {
