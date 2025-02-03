@@ -464,7 +464,7 @@ bool check_collision(position player, position block)
 
 void send_chunk(User user, int x, int z)
 {
-    chunk Chunk = World.generate_chunk(x, z);
+    chunk &Chunk = World.generate_chunk(x, z);
     chunk_data_light chunk_data = 
     {
         minecraft::varint(0x27), x, z, 0x0a, 0x0, Chunk,
@@ -1276,7 +1276,7 @@ int main(int argc, char *argv[])
         update_keep_alive();
         time_ticks++;
         const ms duration = clock::now() - before;
-        //log(std::format("MSPT {}ms", duration.count()), INFO);
+        log(std::format("MSPT {}ms", duration.count()), INFO);
         if (duration.count() <= 50)
             std::this_thread::sleep_for(std::chrono::milliseconds(50) - duration);
     }
