@@ -452,7 +452,7 @@ void send_chat(std::string message, std::string name)
         minecraft::varint(0x1E), minecraft::string_tag(message),
         minecraft::varint(1), minecraft::string_tag(name), false,
     };
-    send_everyone(chat_message);
+    send_everyone_except_overwhelmed(chat_message);
 }
 
 bool check_collision(position player, position block)
@@ -465,6 +465,15 @@ bool check_collision(position player, position block)
 void send_chunk(User user, int x, int z)
 {
     chunk &Chunk = World.generate_chunk(x, z);
+    auto to_place = blocks_to_place.find(std::make_pair(Chunk.x, Chunk.z));
+    if (to_place != blocks_to_place.end())
+    {
+        for (auto blocks: to_place->second)
+        {
+            Chunk.place_block(blocks.x, blocks.y, blocks.z, blocks.block_id);
+        }
+        blocks_to_place.erase(std::make_pair(Chunk.x, Chunk.z));
+    }
     chunk_data_light chunk_data = 
     {
         minecraft::varint(0x27), x, z, 0x0a, 0x0, Chunk,
@@ -571,9 +580,12 @@ void update_visible_chunks()
                 };
                 send_packet(set_center_chunk, user.second.sockfd);
                 int z = (curr_pos.z + user.second.render_distance) - 1;
-                for (int x = (user.second.render_distance * -1) + curr_pos.x; x < user.second.render_distance + curr_pos.x; x++)
+                for (int zz = z; zz < z + 3; zz++)
                 {
-                    send_chunk(user.second, x, z);
+                    for (int x = (user.second.render_distance * -1) + curr_pos.x; x < user.second.render_distance + curr_pos.x; x++)
+                    {
+                        send_chunk(user.second, x, zz);
+                    }
                 }
                 users.find(user.second.sockfd)->second.chunk_pos = curr_pos;
             }
@@ -585,9 +597,12 @@ void update_visible_chunks()
                 };
                 send_packet(set_center_chunk, user.second.sockfd);
                 int z = (curr_pos.z - user.second.render_distance) + 1;
-                for (int x = (user.second.render_distance * -1) + curr_pos.x; x < user.second.render_distance + curr_pos.x; x++)
+                for (int zz = z; zz > z - 3; zz--)
                 {
-                    send_chunk(user.second, x, z);		
+                    for (int x = (user.second.render_distance * -1) + curr_pos.x; x < user.second.render_distance + curr_pos.x; x++)
+                    {
+                        send_chunk(user.second, x, zz);		
+                    }
                 }
                 users.find(user.second.sockfd)->second.chunk_pos = curr_pos;
             }
@@ -599,9 +614,12 @@ void update_visible_chunks()
                 };
                 send_packet(set_center_chunk, user.second.sockfd);
                 int x = (curr_pos.x + user.second.render_distance) - 1;
-                for (int z = (user.second.render_distance * -1) + curr_pos.z; z < user.second.render_distance + curr_pos.z; z++)
+                for (int xx = x; xx < x + 3; xx++)
                 {
-                    send_chunk(user.second, x, z);		
+                    for (int z = (user.second.render_distance * -1) + curr_pos.z; z < user.second.render_distance + curr_pos.z; z++)
+                    {
+                        send_chunk(user.second, xx, z);		
+                    }
                 }
                 users.find(user.second.sockfd)->second.chunk_pos = curr_pos;
             }
@@ -613,9 +631,12 @@ void update_visible_chunks()
                 };
                 send_packet(set_center_chunk, user.second.sockfd);
                 int x = (curr_pos.x - user.second.render_distance) + 1;
-                for (int z = (user.second.render_distance * -1) + curr_pos.z; z < user.second.render_distance + curr_pos.z; z++)
+                for (int xx = x; xx > x - 3; xx--)
                 {
-                    send_chunk(user.second, x, z);	
+                    for (int z = (user.second.render_distance * -1) + curr_pos.z; z < user.second.render_distance + curr_pos.z; z++)
+                    {
+                        send_chunk(user.second, xx, z);	
+                    }
                 }
                 users.find(user.second.sockfd)->second.chunk_pos = curr_pos;
             }

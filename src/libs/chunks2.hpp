@@ -33,13 +33,20 @@ struct position_int
 	int x, y, z;
 };
 
+struct block_pos
+{
+	block_pos(int x_, int y_, int z_, minecraft::varint b_id)
+	:x(x_), y(y_), z(z_), block_id(b_id)
+	{}
+	int x, y, z;
+	minecraft::varint block_id;
+};
 
 std::map<double, dot> t_map = {{-1.0, dot(30, 64, -1.0, -0.1)}, {-0.1, dot(64, 75, -0.1, 0.4)}, {0.4, dot(75, 90, 0.4, 0.6)},
 								{0.6, dot(90, 100, 0.6, 0.8)}, {0.8, dot(100, 130, 0.8, 0.9)}, {0.9, dot(130, 140, 0.9, 1.0)}};
 std::map<double, dot> t_map2 = {{-1.0, dot(-5, -2, -1.0, -0.5)}, {-0.5, dot(-2, 1, -0.5, 0.0)}, {0.0, dot(1, 4, 0.0, 1.0)}};
 std::map<double, dot> t_map3 = {{-1.0, dot(-30, -20, -1.0, -0.8)}, {-0.8, dot(-20, -5, -0.8, 0.0)}, {0.0, dot(-5, 30, 0.0, 0.5)},
 								{0.5, dot(15, 20, 0.5, 1.0)}};
-
 namespace std 
 {
   template <>
@@ -50,7 +57,7 @@ namespace std
     }
   };
 }
-
+std::unordered_map<std::pair<int, int>, std::vector<block_pos>> blocks_to_place;
 struct section
 {
 	section(int pos, bool single_value = false, minecraft::varint value = 0)
@@ -192,27 +199,22 @@ struct chunk
 	std::pair<position_int, position_int> translate_to_other_chunk(position_int block_pos)
 	{
 		position_int ret = block_pos;
-		position_int chunk_ret = {x, 0, z};
-		if (block_pos.x >= 16)
-		{
-			ret.x = block_pos.x - 16;
-			chunk_ret.x++;
+		position_int chunk_ret = {x, 0, z}; 
+
+		// Handle X coordinate
+		if (block_pos.x >= 16 || block_pos.x < 0) {
+			int chunk_offset = (block_pos.x >= 0) ? block_pos.x / 16 : (block_pos.x - 15) / 16;
+			ret.x = rem_euclid(block_pos.x, 16);
+			chunk_ret.x += chunk_offset;
 		}
-		else if (block_pos.x < 0)
-		{
-			ret.x = 16 + block_pos.x;
-			chunk_ret.x--;
+
+		// Handle Z coordinate 
+		if (block_pos.z >= 16 || block_pos.z < 0) {
+			int chunk_offset = (block_pos.z >= 0) ? block_pos.z / 16 : (block_pos.z - 15) / 16;
+			ret.z = rem_euclid(block_pos.z, 16);
+			chunk_ret.z += chunk_offset;
 		}
-		if (block_pos.z >= 16)
-		{
-			ret.z = block_pos.z - 16;
-			chunk_ret.z++;
-		}
-		else if (block_pos.z < 0)
-		{
-			ret.z = 16 + block_pos.z;
-			chunk_ret.z--;
-		}
+
 		return std::make_pair(ret, chunk_ret);
 	}
 };
@@ -221,18 +223,28 @@ struct world
 {
 	std::unordered_map<std::pair<int, int>, chunk> chunks;
 
-	void place_translated_block(position_int block_pos, chunk &chunk, minecraft::varint block_id)
+	void place_translated_block(position_int block_p, chunk &chunk, minecraft::varint block_id)
 	{
-		auto positions = chunk.translate_to_other_chunk(block_pos);
-		auto &chunk2 = generate_chunk(positions.second.x, positions.second.z);
-		chunk2.place_block(positions.first.x, positions.first.y, positions.first.z, block_id);
+		auto positions = chunk.translate_to_other_chunk(block_p);
+		auto bl = blocks_to_place.find(std::make_pair(positions.second.x, positions.second.z));
+		if (bl != blocks_to_place.end())
+		{
+			bl->second.push_back({positions.first.x, positions.first.y, positions.first.z, block_id});
+		}
+		else
+		{
+			std::vector<block_pos> a = {{positions.first.x, positions.first.y, positions.first.z, block_id}};
+			blocks_to_place.insert({std::make_pair(positions.second.x, positions.second.z), a});
+		}
 	}
 
-	chunk &generate_chunk(int x, int z)
+	chunk &generate_chunk(int x, int z, bool trees = true)
 	{
 		auto chunk1 = chunks.find(std::make_pair(x, z));
 		if (chunk1 != chunks.end())
+		{
 			return chunk1->second;
+		}
 		auto chunk_r = chunks.emplace(std::piecewise_construct,
             std::forward_as_tuple(x, z),
             std::forward_as_tuple(x, z));
@@ -244,9 +256,9 @@ struct world
 		{
 			for (int x_ = 0; x_ < 16; x_++)
 			{
-				int worldX = x * 16 + (x < 0 ? -(16 - x_) : x_);
-				int worldZ = z * 16 + (z < 0 ? -(16 - z_) : z_);
-				const double noise = perlin.octave2D_11(((x_ + (x * 16)) * 0.002), ((z_ + (z * 16)) * 0.002), 6);
+				int worldX = x * 16 + x_;
+				int worldZ = z * 16 + z_;
+				const double noise = perlin.octave2D_11((worldX * 0.002), (worldZ * 0.002), 6);
 				
 				int height_ = 0;
 				for (auto p: t_map)
@@ -277,18 +289,18 @@ struct world
 						{
 							chunk.place_block(x_, y + 1, z_, 10756);
 						}
-						if (random2 > 995 && y >= 64)
+						if (random2 > 995 && y >= 64 && trees == true)
 						{
 							//chunk.trees.emplace_back(worldX, height_, worldZ);
-							log(std::format("Tree generated at {} {} {} in chunk {} {} with height {}", (x_ +(x * 16)), height_, (z_ + (z * 16)), x, z, height_), INFO);
-							chunk.place_block(x_, y, z_, 146);
-							chunk.place_block(x_, y + 1, z_, 146);
-							chunk.place_block(x_, y + 2, z_, 146);
-							chunk.place_block(x_, y + 3, z_, 146);	
-							place_translated_block({x_ + 1, y + 3, z_}, chunk, 146);
-							place_translated_block({x_ + 2, y + 3, z_}, chunk, 146);
-							place_translated_block({x_ + 2, y + 4, z_}, chunk, 146);
-							place_translated_block({x_ + 2, y + 5, z_}, chunk, 146);
+							//log(std::format("Tree generated at {} {} {} in chunk {} {} with height {}", (x_ +(x * 16)), height_, (z_ + (z * 16)), x, z, height_), INFO);
+							chunk.place_block(x_, height_, z_, 146);
+							chunk.place_block(x_, height_ + 1, z_, 146);
+							chunk.place_block(x_, height_ + 2, z_, 146);
+							chunk.place_block(x_, height_ + 3, z_, 146);	
+							place_translated_block({x_ + 1, height_ + 3, z_}, chunk, 146);
+							place_translated_block({x_ + 2, height_ + 3, z_}, chunk, 146);
+							place_translated_block({x_ + 2, height_ + 4, z_}, chunk, 146);
+							place_translated_block({x_ + 2, height_ + 5, z_}, chunk, 146);
 							int diff = 4;
 							int diff2 = 0;
 							for (int i = y + 5; i < y + 10;i++)
@@ -342,7 +354,7 @@ struct world
 	}
 	void place_block(int x, int y, int z, minecraft::varint block_id)
 	{
-		auto &chunk = generate_chunk(floor(x/16), floor(z/16));
+		auto &chunk = generate_chunk(floor((float)x/16.0f), floor((float)z/16.0f));
 		chunk.place_block(rem_euclid(x, 16), y, rem_euclid(z, 16), block_id);
 	}
 
