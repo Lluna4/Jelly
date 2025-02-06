@@ -14,10 +14,9 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - name: "Build"
-        working-directory: build
         run: |
-            git clone https://github.com/nlohmann/json ../nlohmann_json
-            cmake .. && cmake && cmake --build .
+            git clone https://github.com/nlohmann/json nlohmann_json
+            mkdir build && cd build && cmake .. && cmake --build .
       - uses: "marvinpinto/action-automatic-releases@latest"
         with:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
