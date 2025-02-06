@@ -17,6 +17,8 @@ jobs:
         run: |
             git clone https://github.com/nlohmann/json nlohmann_json
             mkdir build && cd build && cmake .. && cmake --build .
+        env:
+          CXX:  g++-14
       - uses: "marvinpinto/action-automatic-releases@latest"
         with:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
