@@ -10,6 +10,7 @@
 #include <print>
 #include <bitset>
 #include <map>
+#include "stdlib.h"
 
 struct packet
 {
@@ -442,3 +443,15 @@ struct indexed_map
 	std::map<std::string, const std::type_info*> map;
 	std::vector<std::string> index;
 };
+
+std::string random_string(int size)
+{
+    srandom(time(NULL));
+    std::string ret;
+    
+    for (int i = 0; i < size; i++)
+    {
+        ret.push_back((char)(random()%25 + 'a')); //25 is equal to 'z' - 'a'
+    }
+    return ret;
+}

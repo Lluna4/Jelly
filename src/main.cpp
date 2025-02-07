@@ -14,6 +14,7 @@
 #include "libs/chunks2.hpp"
 #include "libs/tokenize.hpp"
 #include "libs/config.hpp"
+#include "libs/localization.hpp"
 
 int epfd;
 
@@ -61,108 +62,7 @@ struct angles
     float yaw, pitch;
 };
 
-std::map<std::string, std::string> languages = {
-    {"af", "afrikaans"},
-    {"ar", "arabic"},
-    {"as", "asturianu"},
-    {"az", "azerbaijani"},
-    {"ba", "bashkir"},
-    {"be", "belarusian"},
-    {"bg", "bulgarian"},
-    {"br", "breton"},
-    {"bs", "bosnian"},
-    {"ca", "catalan"},
-    {"cs", "czech"},
-    {"cy", "welsh"},
-    {"da", "danish"},
-    {"de", "german"},
-    {"el", "greek"},
-    {"en", "english"},
-    {"eo", "esperanto"},
-    {"es", "spanish"},
-    {"et", "estonian"},
-    {"eu", "basque"},
-    {"fa", "persian"},
-    {"fi", "finnish"},
-    {"fil", "filipino"},
-    {"fo", "faroese"},
-    {"fr", "french"},
-    {"fy", "frisian"},
-    {"ga", "irish"},
-    {"gd", "scottish gaelic"},
-    {"gl", "galician"},
-    {"gv", "manx"},
-    {"ha", "hawaiian"},
-    {"he", "hebrew"},
-    {"hi", "hindi"},
-    {"hr", "croatian"},
-    {"hu", "hungarian"},
-    {"hy", "armenian"},
-    {"id", "indonesian"},
-    {"ig", "igbo"},
-    {"io", "ido"},
-    {"is", "icelandic"},
-    {"it", "italian"},
-    {"ja", "japanese"},
-    {"jb", "lojban"},
-    {"ka", "georgian"},
-    {"kk", "kazakh"},
-    {"kn", "kannada"},
-    {"ko", "korean"},
-    {"ks", "colognian"},
-    {"kw", "cornish"},
-    {"la", "latin"},
-    {"lb", "luxembourgish"},
-    {"li", "limburgish"},
-    {"lt", "lithuanian"},
-    {"lv", "latvian"},
-    {"mi", "maori"},
-    {"mk", "macedonian"},
-    {"mn", "mongolian"},
-    {"ms", "malay"},
-    {"mt", "maltese"},
-    {"nd", "low german"},
-    {"nl", "dutch"},
-    {"nn", "norwegian nynorsk"},
-    {"no", "norwegian"},
-    {"oc", "occitan"},
-    {"pl", "polish"},
-    {"pt", "portuguese"},
-    {"qy", "quenya"},
-    {"ro", "romanian"},
-    {"ru", "russian"},
-    {"se", "northern sami"},
-    {"sk", "slovak"},
-    {"sl", "slovenian"},
-    {"so", "somali"},
-    {"sq", "albanian"},
-    {"sr", "serbian"},
-    {"sv", "swedish"},
-    {"sx", "saxon"},
-    {"sz", "silesian"},
-    {"ta", "tamil"},
-    {"th", "thai"},
-    {"tl", "tagalog"},
-    {"tlh", "klingon"},
-    {"tr", "turkish"},
-    {"tt", "tatar"},
-    {"uk", "ukrainian"},
-    {"val", "valencian"},
-    {"vec", "venetian"},
-    {"vi", "vietnamese"},
-    {"yi", "yiddish"},
-    {"yo", "yoruba"},
-    {"zh", "chinese"}
-};
 
-struct message_locale
-{
-    message_locale(std::map<std::string, std::string> messages_, std::string def)
-    :messages(messages_), default_message(def)
-    {}
-    std::map<std::string, std::string> messages;
-    std::string default_message;
-};
 
 class User
 {
@@ -259,6 +159,37 @@ class User
 };
 std::map<int, User> users;
 
+int id_count = 1;
+
+struct entity
+{
+    entity(minecraft::varint ty, double x_, double y_, double z_)
+    :type(ty), x(x_), y(y_), z(z_)
+    {
+        yaw = 0.0f;
+        pitch = 0.0f;
+        uuid.generate(random_string(5));
+        for (auto index: users)
+        {
+            if (id_count == index.first)
+                id_count++;
+        }
+        id = id_count;
+        id_count++;
+        velocityX = 0;
+        velocityY = 0;
+        velocityY = 0;
+    }
+    minecraft::uuid uuid;
+    minecraft::varint type;
+    int id;
+    double x, y, z;
+    float yaw, pitch;
+    short velocityX, velocityY, velocityZ;
+};
+
+std::vector<entity> ai_entities;
+
 void accept_th(int sock)
 {
     sockaddr_in addr = {0};
@@ -275,6 +206,53 @@ void accept_th(int sock)
             users.erase(new_client);
         }
         users.emplace(new_client, User(new_client));
+    }
+}
+
+void disconnect_user(int current_fd)
+{
+    netlib::disconnect_server(current_fd, epfd);
+    auto current_user = users.find(current_fd)->second;
+    if (current_user.state == PLAY)
+    {
+        std::tuple<minecraft::varint, minecraft::string_tag, bool> system_chat = 
+        {
+            minecraft::varint(0x6C), minecraft::string_tag(std::format("{} disconnected", current_user.name)), false
+        };
+        for (auto us: users)
+        {
+            if (us.second.state == PLAY && us.second.loading == false)
+            {
+                send_packet(system_chat, us.second.sockfd);
+            }
+        }
+        current_user.to_file();
+        connected_users--;
+    }
+    minecraft::uuid uuid = current_user.uuid;
+    users.erase(current_user.sockfd);
+    
+    std::tuple<minecraft::varint, minecraft::varint, minecraft::varint> remove_entity = 
+    {
+        minecraft::varint(0x42), minecraft::varint(1), minecraft::varint(current_user.sockfd)
+    };
+    std::tuple<minecraft::varint, minecraft::varint, minecraft::uuid> remove_info = 
+    {
+        minecraft::varint(0x3D), minecraft::varint(1), uuid
+    };
+    for (auto us: users)
+    {
+        if (us.second.state == PLAY && us.second.loading == false)
+        {
+            send_packet(remove_entity, us.second.sockfd);
+        }
+    }
+    for (auto us: users)
+    {
+        if (us.second.state == PLAY && us.second.loading == false)
+        {
+            send_packet(remove_info, us.second.sockfd);
+        }
     }
 }
 
@@ -417,33 +395,6 @@ void registry_data(User user)
     close(fd);
 }
 
-
-
-void update_players_position(User user)
-{
-    for (auto us: users)
-    {
-        if (us.second.sockfd != user.sockfd && us.second.state == PLAY && user.state == PLAY && user.loading == false)
-        {
-            std::tuple<minecraft::varint, minecraft::varint, double, double, double, char, char, bool> update_pos =
-            {
-                minecraft::varint(0x70), minecraft::varint(us.second.sockfd),
-                us.second.pos.x,
-                us.second.pos.y,
-                us.second.pos.z,
-                (char)((us.second.angle.yaw/ 360) * 256), (char)((us.second.angle.pitch/ 360) * 256),
-                us.second.on_ground
-            };
-            send_check(update_pos, user.sockfd);
-            std::tuple<minecraft::varint, minecraft::varint, char> head_angle =
-            {
-                minecraft::varint(0x48), minecraft::varint(us.second.sockfd), (char)((us.second.angle.yaw/ 360) * 256)
-            };
-            send_check(head_angle, user.sockfd);
-        }
-    }
-}
-
 template<typename ...T>
 void send_everyone(std::tuple<T...> packet)
 {
@@ -494,6 +445,49 @@ void send_everyone_visible(std::tuple<T...> packet, int x, int y, int z)
                 if (us.second.chunk_pos.z + us.second.render_distance > (int)chunk_pos_z && us.second.chunk_pos.z - us.second.render_distance < (int)chunk_pos_z)
                     send_check(packet, us.second.sockfd);
             }
+        }
+    }
+}
+
+void update_ai_position()
+{
+    for (auto &Entity: ai_entities)
+    {
+        Entity.x += 0.3;
+        std::tuple<minecraft::varint, minecraft::varint, double, double, double, char, char, bool> update_pos =
+        {
+            minecraft::varint(0x70), minecraft::varint(Entity.id),
+            Entity.x,
+            Entity.y,
+            Entity.z,
+            (char)((Entity.yaw/ 360) * 256), (char)((Entity.pitch/ 360) * 256),
+            true
+        };
+        send_everyone_visible(update_pos, Entity.x, Entity.y, Entity.z);
+    }
+}
+
+void update_players_position(User user)
+{
+    for (auto us: users)
+    {
+        if (us.second.sockfd != user.sockfd && us.second.state == PLAY && user.state == PLAY && user.loading == false)
+        {
+            std::tuple<minecraft::varint, minecraft::varint, double, double, double, char, char, bool> update_pos =
+            {
+                minecraft::varint(0x70), minecraft::varint(us.second.sockfd),
+                us.second.pos.x,
+                us.second.pos.y,
+                us.second.pos.z,
+                (char)((us.second.angle.yaw/ 360) * 256), (char)((us.second.angle.pitch/ 360) * 256),
+                us.second.on_ground
+            };
+            send_check(update_pos, user.sockfd);
+            std::tuple<minecraft::varint, minecraft::varint, char> head_angle =
+            {
+                minecraft::varint(0x48), minecraft::varint(us.second.sockfd), (char)((us.second.angle.yaw/ 360) * 256)
+            };
+            send_check(head_angle, user.sockfd);
         }
     }
 }
@@ -610,10 +604,11 @@ void place_block(std::int32_t x, std::int32_t y, std::int32_t z, int block_id)
 
 
 
-void update_visible_chunks(User user)
+void update_visible_chunks(User &user)
 {
     if (user.state == PLAY && user.loading == false)
     {
+        user.loading = true;
         position pos = user.pos;
         chunk_pos_ curr_pos = {(int)(floor(pos.x/16.0f)), (int)(floor(pos.z/16.0f))};
         chunk_pos_ prev_pos = user.chunk_pos;
@@ -693,6 +688,7 @@ void update_visible_chunks(User user)
             users.find(user.sockfd)->second.chunk_pos = curr_pos;
         }
         log("************SENT CHUNKS************", INFO);
+        user.loading = false;
     }
 }
 void update_keep_alive()
@@ -728,7 +724,14 @@ void update_keep_alive()
     }
 }
 
-
+void spawn_entity(entity Entity)
+{
+    auto spawn_Entity = std::make_tuple(minecraft::varint(0x01), minecraft::varint(Entity.id), Entity.uuid, Entity.type,
+                                        Entity.x, Entity.y, Entity.z,(char)((Entity.yaw/ 360) * 256), (char)((Entity.pitch/ 360) * 256),
+                                        (char)((Entity.yaw/ 360) * 256), minecraft::varint(0),
+                                        Entity.velocityX,Entity.velocityY,Entity.velocityZ);
+    send_everyone(spawn_Entity);
+}
 
 void execute_packet(packet pkt, User &user)
 {
@@ -1155,7 +1158,6 @@ void execute_packet(packet pkt, User &user)
             }
             log(std::format("x {} y {} z {}", x, y, z), INFO);
             log(std::format("Placed block {} in position {}",user.inventory[user.selected_inv], user.selected_inv));
-            World.place_block(x, y, z, minecraft::varint(user.inventory[user.selected_inv]));
             unsigned char anim = 0;
             if (std::get<0>(use_item_on).num == 1)
                 anim = 3;
@@ -1164,7 +1166,13 @@ void execute_packet(packet pkt, User &user)
                 minecraft::varint(0x03), minecraft::varint(user.sockfd), anim
             };
             send_everyone_except_user(entity_animation, user.sockfd);
-
+            if (user.inventory_item[user.selected_inv] == 1021)
+            {
+                ai_entities.emplace_back(minecraft::varint(22), x, y, z);
+                spawn_entity(ai_entities.back());
+                return;
+            }
+            World.place_block(x, y, z, minecraft::varint(user.inventory[user.selected_inv]));
             std::tuple<minecraft::varint, long, minecraft::varint> update_block =
             {
                 minecraft::varint(0x09), (long long)((((x & (unsigned long)0x3FFFFFF) << 38) | ((z & (unsigned long)0x3FFFFFF) << 12) | (y & (unsigned long)0xFFF))), minecraft::varint(user.inventory[user.selected_inv])
@@ -1296,9 +1304,9 @@ int main(int argc, char *argv[])
         }
         for (auto user: users)
         {
-            std::thread ch_th(update_visible_chunks, user.second);
-            ch_th.detach();
+            update_visible_chunks(user.second);
         }
+        update_ai_position();
         update_keep_alive();
         time_ticks++;
         const ms duration = clock::now() - before;
