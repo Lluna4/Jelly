@@ -278,6 +278,59 @@ void accept_th(int sock)
     }
 }
 
+void disconnect_user(User current_user)
+{
+    netlib::disconnect_server(current_user.sockfd, epfd);
+    if (current_user.state == PLAY)
+    {
+        std::tuple<minecraft::varint, minecraft::string_tag, bool> system_chat = 
+        {
+            minecraft::varint(0x6C), minecraft::string_tag(std::format("{} disconnected", current_user.name)), false
+        };
+        for (auto us: users)
+        {
+            if (us.second.state == PLAY && us.second.loading == false)
+            {
+                send_packet(system_chat, us.second.sockfd);
+            }
+        }
+        current_user.to_file();
+        connected_users--;
+    }
+    minecraft::uuid uuid = current_user.uuid;
+    users.erase(current_user.sockfd);
+    
+    std::tuple<minecraft::varint, minecraft::varint, minecraft::varint> remove_entity = 
+    {
+        minecraft::varint(0x42), minecraft::varint(1), minecraft::varint(current_user.sockfd)
+    };
+    std::tuple<minecraft::varint, minecraft::varint, minecraft::uuid> remove_info = 
+    {
+        minecraft::varint(0x3D), minecraft::varint(1), uuid
+    };
+    for (auto us: users)
+    {
+        if (us.second.state == PLAY && us.second.loading == false)
+        {
+            send_packet(remove_entity, us.second.sockfd);
+        }
+    }
+    for (auto us: users)
+    {
+        if (us.second.state == PLAY && us.second.loading == false)
+        {
+            send_packet(remove_info, us.second.sockfd);
+        }
+    }
+}
+
+template<typename ...T>
+void send_check(std::tuple<T...> packet, int sock)
+{
+    if (send_packet(packet, sock) == -1)
+        disconnect_user(users.find(sock)->second);
+}
+
 void status_response(User user)
 {
 	std::string response_str;
@@ -304,7 +357,7 @@ void status_response(User user)
     size_t size = WriteUleb128(dummy, response_str.length());
     minecraft::string str(response_str);
     std::tuple<minecraft::varint, minecraft::string> status_pkt = {minecraft::varint(0), str};
-    send_packet(status_pkt, user.sockfd);
+    send_check(status_pkt, user.sockfd);
 }
 
 void registry_data(User user)
@@ -381,12 +434,12 @@ void update_players_position(User user)
                 (char)((us.second.angle.yaw/ 360) * 256), (char)((us.second.angle.pitch/ 360) * 256),
                 us.second.on_ground
             };
-            send_packet(update_pos, user.sockfd);
+            send_check(update_pos, user.sockfd);
             std::tuple<minecraft::varint, minecraft::varint, char> head_angle =
             {
                 minecraft::varint(0x48), minecraft::varint(us.second.sockfd), (char)((us.second.angle.yaw/ 360) * 256)
             };
-            send_packet(head_angle, user.sockfd);
+            send_check(head_angle, user.sockfd);
         }
     }
 }
@@ -398,7 +451,7 @@ void send_everyone(std::tuple<T...> packet)
     {
         if (us.second.state == PLAY && us.second.loading == false)
         {
-            send_packet(packet, us.second.sockfd);
+            send_check(packet, us.second.sockfd);
         }
     }
 }
@@ -410,7 +463,7 @@ void send_everyone_except_user(std::tuple<T...> packet, int id)
     {
         if (us.second.state == PLAY && us.second.sockfd != id && us.second.loading == false)
         {
-            send_packet(packet, us.second.sockfd);
+            send_check(packet, us.second.sockfd);
         }
     }
 }
@@ -422,7 +475,7 @@ void send_everyone_except_overwhelmed(std::tuple<T...> packet)
     {
         if (us.second.state == PLAY && us.second.overwhelmed == false && us.second.loading == false)
         {
-            send_packet(packet, us.second.sockfd);
+            send_check(packet, us.second.sockfd);
         }
     }
 }
@@ -439,7 +492,7 @@ void send_everyone_visible(std::tuple<T...> packet, int x, int y, int z)
             if (us.second.chunk_pos.x + us.second.render_distance > (int)chunk_pos_x && us.second.chunk_pos.x - us.second.render_distance < (int)chunk_pos_x)
             {
                 if (us.second.chunk_pos.z + us.second.render_distance > (int)chunk_pos_z && us.second.chunk_pos.z - us.second.render_distance < (int)chunk_pos_z)
-                    send_packet(packet, us.second.sockfd);
+                    send_check(packet, us.second.sockfd);
             }
         }
     }
@@ -481,7 +534,7 @@ void send_chunk(User user, int x, int z)
         minecraft::varint(1), (long)0, minecraft::varint(1), (long)0, minecraft::varint(0),
         minecraft::varint(0)
     };
-    send_packet(chunk_data, user.sockfd); 
+    send_check(chunk_data, user.sockfd); 
 }
 
 void send_world(User &user)
@@ -494,7 +547,7 @@ void send_world(User &user)
     {
         minecraft::varint(0x54), minecraft::varint((unsigned long)(*(unsigned int *)&x_)), minecraft::varint((unsigned long)(*(unsigned int *)&z))
     };
-    send_packet(set_center_chunk, user.sockfd);
+    send_check(set_center_chunk, user.sockfd);
     for (int y = z - user.render_distance; y <= z + user.render_distance; y++)
     {
         for (int x = x_ - user.render_distance; x <= x_ + user.render_distance; x++)
@@ -520,7 +573,7 @@ void system_chat_unique(minecraft::string message, int sock)
     {
         minecraft::varint(0x6C), minecraft::string_tag(message.str), false
     };
-    send_packet(system_chat, sock);
+    send_check(system_chat, sock);
 }
 
 void system_chat(message_locale msg)
@@ -535,7 +588,7 @@ void system_chat(message_locale msg)
             {
                 minecraft::varint(0x6C), minecraft::string_tag(msg.default_message), false
             };
-            send_packet(system_chat, user.second.sockfd);
+            send_check(system_chat, user.second.sockfd);
         }
         else
         {
@@ -544,7 +597,7 @@ void system_chat(message_locale msg)
             {
                 minecraft::varint(0x6C), minecraft::string_tag(locale_msg->second), false
             };
-            send_packet(system_chat, user.second.sockfd);
+            send_check(system_chat, user.second.sockfd);
         }
     }
 
@@ -557,143 +610,91 @@ void place_block(std::int32_t x, std::int32_t y, std::int32_t z, int block_id)
 
 
 
-void update_visible_chunks()
+void update_visible_chunks(User user)
 {
-    for (auto user: users)
+    if (user.state == PLAY && user.loading == false)
     {
-        if (user.second.state == PLAY && user.second.loading == false)
+        position pos = user.pos;
+        chunk_pos_ curr_pos = {(int)(floor(pos.x/16.0f)), (int)(floor(pos.z/16.0f))};
+        chunk_pos_ prev_pos = user.chunk_pos;
+        //log(std::format("curr pos x {} z {}", curr_pos.x, curr_pos.z));
+        if (curr_pos.x == prev_pos.x && curr_pos.z == prev_pos.z)
         {
-            position pos = user.second.pos;
-            chunk_pos_ curr_pos = {(int)(floor(pos.x/16.0f)), (int)(floor(pos.z/16.0f))};
-            chunk_pos_ prev_pos = user.second.chunk_pos;
-            //log(std::format("curr pos x {} z {}", curr_pos.x, curr_pos.z));
-            if (curr_pos.x == prev_pos.x && curr_pos.z == prev_pos.z)
-            {
-                users.find(user.second.sockfd)->second.chunk_pos = curr_pos;
-                continue;
-            }
-            if (curr_pos.z > prev_pos.z)
-            {
-                std::tuple<minecraft::varint, minecraft::varint, minecraft::varint> set_center_chunk =
-                {
-                    minecraft::varint(0x54), minecraft::varint((unsigned long)(*(unsigned int *)&curr_pos.x)), minecraft::varint((unsigned long)(*(unsigned int *)&curr_pos.z))
-                };
-                send_packet(set_center_chunk, user.second.sockfd);
-                int z = (curr_pos.z + user.second.render_distance) - 1;
-                for (int zz = z; zz < z + 3; zz++)
-                {
-                    for (int x = (user.second.render_distance * -1) + curr_pos.x; x < user.second.render_distance + curr_pos.x; x++)
-                    {
-                        send_chunk(user.second, x, zz);
-                    }
-                }
-                users.find(user.second.sockfd)->second.chunk_pos = curr_pos;
-            }
-            else if (curr_pos.z < prev_pos.z)
-            {
-                std::tuple<minecraft::varint, minecraft::varint, minecraft::varint> set_center_chunk =
-                {
-                    minecraft::varint(0x54), minecraft::varint((unsigned long)(*(unsigned int *)&curr_pos.x)), minecraft::varint((unsigned long)(*(unsigned int *)&curr_pos.z))
-                };
-                send_packet(set_center_chunk, user.second.sockfd);
-                int z = (curr_pos.z - user.second.render_distance) + 1;
-                for (int zz = z; zz > z - 3; zz--)
-                {
-                    for (int x = (user.second.render_distance * -1) + curr_pos.x; x < user.second.render_distance + curr_pos.x; x++)
-                    {
-                        send_chunk(user.second, x, zz);		
-                    }
-                }
-                users.find(user.second.sockfd)->second.chunk_pos = curr_pos;
-            }
-            if (curr_pos.x > prev_pos.x)
-            {
-                std::tuple<minecraft::varint, minecraft::varint, minecraft::varint> set_center_chunk =
-                {
-                    minecraft::varint(0x54), minecraft::varint((unsigned long)(*(unsigned int *)&curr_pos.x)), minecraft::varint((unsigned long)(*(unsigned int *)&curr_pos.z))
-                };
-                send_packet(set_center_chunk, user.second.sockfd);
-                int x = (curr_pos.x + user.second.render_distance) - 1;
-                for (int xx = x; xx < x + 3; xx++)
-                {
-                    for (int z = (user.second.render_distance * -1) + curr_pos.z; z < user.second.render_distance + curr_pos.z; z++)
-                    {
-                        send_chunk(user.second, xx, z);		
-                    }
-                }
-                users.find(user.second.sockfd)->second.chunk_pos = curr_pos;
-            }
-            else if (curr_pos.x < prev_pos.x)
-            {
-                std::tuple<minecraft::varint, minecraft::varint, minecraft::varint> set_center_chunk =
-                {
-                    minecraft::varint(0x54), minecraft::varint((unsigned long)(*(unsigned int *)&curr_pos.x)), minecraft::varint((unsigned long)(*(unsigned int *)&curr_pos.z))
-                };
-                send_packet(set_center_chunk, user.second.sockfd);
-                int x = (curr_pos.x - user.second.render_distance) + 1;
-                for (int xx = x; xx > x - 3; xx--)
-                {
-                    for (int z = (user.second.render_distance * -1) + curr_pos.z; z < user.second.render_distance + curr_pos.z; z++)
-                    {
-                        send_chunk(user.second, xx, z);	
-                    }
-                }
-                users.find(user.second.sockfd)->second.chunk_pos = curr_pos;
-            }
-            log("************SENT CHUNKS************", INFO);
+            users.find(user.sockfd)->second.chunk_pos = curr_pos;
+            return;
         }
+
+        if (curr_pos.z > prev_pos.z)
+        {
+            std::tuple<minecraft::varint, minecraft::varint, minecraft::varint> set_center_chunk =
+            {
+                minecraft::varint(0x54), minecraft::varint((unsigned long)(*(unsigned int *)&curr_pos.x)), minecraft::varint((unsigned long)(*(unsigned int *)&curr_pos.z))
+            };
+            send_check(set_center_chunk, user.sockfd);
+            int z = (curr_pos.z + user.render_distance) - 1;
+            for (int zz = z; zz < z + 3; zz++)
+            {
+                for (int x = (user.render_distance * -1) + curr_pos.x; x < user.render_distance + curr_pos.x; x++)
+                {
+                    send_chunk(user, x, zz);
+                }
+            }
+            users.find(user.sockfd)->second.chunk_pos = curr_pos;
+        }
+        else if (curr_pos.z < prev_pos.z)
+        {
+            std::tuple<minecraft::varint, minecraft::varint, minecraft::varint> set_center_chunk =
+            {
+                minecraft::varint(0x54), minecraft::varint((unsigned long)(*(unsigned int *)&curr_pos.x)), minecraft::varint((unsigned long)(*(unsigned int *)&curr_pos.z))
+            };
+            send_check(set_center_chunk, user.sockfd);
+            int z = (curr_pos.z - user.render_distance) + 1;
+            for (int zz = z; zz > z - 3; zz--)
+            {
+                for (int x = (user.render_distance * -1) + curr_pos.x; x < user.render_distance + curr_pos.x; x++)
+                {
+                    send_chunk(user, x, zz);
+                }
+            }
+            users.find(user.sockfd)->second.chunk_pos = curr_pos;
+        }
+        if (curr_pos.x > prev_pos.x)
+        {
+            std::tuple<minecraft::varint, minecraft::varint, minecraft::varint> set_center_chunk =
+            {
+                minecraft::varint(0x54), minecraft::varint((unsigned long)(*(unsigned int *)&curr_pos.x)), minecraft::varint((unsigned long)(*(unsigned int *)&curr_pos.z))
+            };
+            send_check(set_center_chunk, user.sockfd);
+            int x = (curr_pos.x + user.render_distance) - 1;
+            for (int xx = x; xx < x + 3; xx++)
+            {
+                for (int z = (user.render_distance * -1) + curr_pos.z; z < user.render_distance + curr_pos.z; z++)
+                {
+                    send_chunk(user, xx, z);
+                }
+            }
+            users.find(user.sockfd)->second.chunk_pos = curr_pos;
+        }
+        else if (curr_pos.x < prev_pos.x)
+        {
+            std::tuple<minecraft::varint, minecraft::varint, minecraft::varint> set_center_chunk =
+            {
+                minecraft::varint(0x54), minecraft::varint((unsigned long)(*(unsigned int *)&curr_pos.x)), minecraft::varint((unsigned long)(*(unsigned int *)&curr_pos.z))
+            };
+            send_check(set_center_chunk, user.sockfd);
+            int x = (curr_pos.x - user.render_distance) + 1;
+            for (int xx = x; xx > x - 3; xx--)
+            {
+                for (int z = (user.render_distance * -1) + curr_pos.z; z < user.render_distance + curr_pos.z; z++)
+                {
+                    send_chunk(user, xx, z);
+                }
+            }
+            users.find(user.sockfd)->second.chunk_pos = curr_pos;
+        }
+        log("************SENT CHUNKS************", INFO);
     }
 }
-
-void disconnect_user(int current_fd)
-{
-    netlib::disconnect_server(current_fd, epfd);
-    auto current_user = users.find(current_fd)->second;
-    if (current_user.state == PLAY)
-    {
-        system_chat(minecraft::string(std::format("{} disconnected", current_user.name)));
-        current_user.to_file();
-        connected_users--;
-    }
-    minecraft::uuid uuid = current_user.uuid;
-    users.erase(current_fd);
-    
-    std::tuple<minecraft::varint, minecraft::varint, minecraft::varint> remove_entity = 
-    {
-        minecraft::varint(0x42), minecraft::varint(1), minecraft::varint(current_fd)
-    };
-    std::tuple<minecraft::varint, minecraft::varint, minecraft::uuid> remove_info = 
-    {
-        minecraft::varint(0x3D), minecraft::varint(1), uuid
-    };
-    send_everyone(remove_entity);
-    send_everyone(remove_info);
-}
-
-void disconnect_user(User current_user)
-{
-    netlib::disconnect_server(current_user.sockfd, epfd);
-    if (current_user.state == PLAY)
-    {
-        system_chat(minecraft::string(std::format("{} disconnected", current_user.name)));
-        current_user.to_file();
-        connected_users--;
-    }
-    minecraft::uuid uuid = current_user.uuid;
-    users.erase(current_user.sockfd);
-    
-    std::tuple<minecraft::varint, minecraft::varint, minecraft::varint> remove_entity = 
-    {
-        minecraft::varint(0x42), minecraft::varint(1), minecraft::varint(current_user.sockfd)
-    };
-    std::tuple<minecraft::varint, minecraft::varint, minecraft::uuid> remove_info = 
-    {
-        minecraft::varint(0x3D), minecraft::varint(1), uuid
-    };
-    send_everyone(remove_entity);
-    send_everyone(remove_info);
-}
-
 void update_keep_alive()
 {
     for (auto &user: users)
@@ -708,7 +709,7 @@ void update_keep_alive()
             else if (user.second.ticks_to_keep_alive == 0 && user.second.loading == false)
             {
                 std::tuple<minecraft::varint, long> keep_alive = {minecraft::varint(0x26), 12324};
-                send_packet(keep_alive, user.second.sockfd);
+                send_check(keep_alive, user.second.sockfd);
                 user.second.ticks_to_keep_alive--;
             }
             else if (user.second.ticks_to_keep_alive < 0)
@@ -756,7 +757,7 @@ void execute_packet(packet pkt, User &user)
 
             std::tuple<long> ping;
             ping = read_packet(ping, pkt.data);
-            send_packet(std::make_tuple(minecraft::varint(1), std::get<0>(ping)), user.sockfd);
+            send_check(std::make_tuple(minecraft::varint(1), std::get<0>(ping)), user.sockfd);
         }
     }
     if (user.state == LOGIN)
@@ -770,7 +771,7 @@ void execute_packet(packet pkt, User &user)
 
             auto login_succ = std::make_tuple(minecraft::varint(0x02), user.uuid, minecraft::string(user.name), 
                     minecraft::varint(0x00),(unsigned char)true);
-            send_packet(login_succ, user.sockfd);
+            send_check(login_succ, user.sockfd);
         }
         if (pkt.id == 0x3)
         {
@@ -802,11 +803,11 @@ void execute_packet(packet pkt, User &user)
             auto known_packs = std::make_tuple(minecraft::varint(0x0E), minecraft::varint(1),
                 minecraft::string("minecraft"), minecraft::string("core"), minecraft::string("1.21"));
             auto brand = std::make_tuple(minecraft::varint(0x01), minecraft::string("minecraft:brand"), minecraft::string("Jelly"));
-            send_packet(brand, user.sockfd);
-            send_packet(known_packs, user.sockfd);
+            send_check(brand, user.sockfd);
+            send_check(known_packs, user.sockfd);
             registry_data(user);
             std::tuple<minecraft::varint> end_config = {minecraft::varint(0x03)};
-            send_packet(end_config, user.sockfd);
+            send_check(end_config, user.sockfd);
         }
         if (pkt.id == 0x03)
         {
@@ -822,7 +823,7 @@ void execute_packet(packet pkt, User &user)
                 minecraft::string("minecraft:overworld"), 123456, 1, -1, false,
                 false, false, minecraft::varint(0), false
             };
-            send_packet(login, user.sockfd);
+            send_check(login, user.sockfd);
 
             auto commands = std::make_tuple(minecraft::varint(0x11), minecraft::varint(4),
                     std::make_tuple((char)0x00, minecraft::varint(3), minecraft::varint(1), minecraft::varint(2), minecraft::varint(3)),
@@ -831,12 +832,12 @@ void execute_packet(packet pkt, User &user)
                     std::make_tuple((char)0x01, minecraft::varint(0), minecraft::string("overwhelmed")),
                     minecraft::varint(0));
 
-            send_packet(commands, user.sockfd);
+            send_check(commands, user.sockfd);
             std::tuple<minecraft::varint, double, double, double, float, float, char, minecraft::varint> sync_pos =
             {
                 minecraft::varint(0x40), user.pos.x, user.pos.y, user.pos.z, user.angle.yaw, user.angle.pitch, 0, minecraft::varint(0x0)
             };
-            send_packet(sync_pos, user.sockfd);
+            send_check(sync_pos, user.sockfd);
 
             std::string user_name = std::format("{} [{}]", user.name, user.pronouns);
             std::tuple<minecraft::varint, char, minecraft::varint, minecraft::uuid,
@@ -873,10 +874,10 @@ void execute_packet(packet pkt, User &user)
                                 minecraft::string(us.second.name), minecraft::varint(0), true, true,
                                 minecraft::string_tag(name)
                             };
-                    send_packet(info_update_head, user.sockfd);
+                    send_check(info_update_head, user.sockfd);
                     if (user.sockfd != us.second.sockfd)
                     {
-                        send_packet(info_update_head_user, us.second.sockfd);
+                        send_check(info_update_head_user, us.second.sockfd);
                         
                         std::tuple<minecraft::varint, minecraft::varint, minecraft::uuid, minecraft::varint, double,
                                     double, double, char, char, char, minecraft::varint,
@@ -888,32 +889,32 @@ void execute_packet(packet pkt, User &user)
                            (char)((us.second.angle.yaw/ 360) * 256), (char)((us.second.angle.pitch/ 360) * 256),
                            (us.second.angle.yaw/ 360) * 256, minecraft::varint(0),0,0,0
                         };
-                        send_packet(spawn_entity, user.sockfd);
-                        send_packet(spawn_entity_user, us.second.sockfd);
+                        send_check(spawn_entity, user.sockfd);
+                        send_check(spawn_entity_user, us.second.sockfd);
                     }
                 }
             }
             auto set_time = std::make_tuple(minecraft::varint(0x64), (long)time_ticks, (long)(time_ticks%24000));
-            send_packet(set_time, user.sockfd);
+            send_check(set_time, user.sockfd);
             auto set_effect = std::make_tuple(minecraft::varint(0x76), minecraft::varint(user.sockfd), minecraft::varint(15),
             minecraft::varint(1), minecraft::varint(240000), (char)0x04);
-            send_packet(set_effect, user.sockfd);
+            send_check(set_effect, user.sockfd);
             std::tuple<minecraft::varint, minecraft::varint, minecraft::varint> set_center_chunk =
             {
                 minecraft::varint(0x54), minecraft::varint(0), minecraft::varint(0)
             };
-            send_packet(set_center_chunk, user.sockfd);
+            send_check(set_center_chunk, user.sockfd);
 
             std::tuple<minecraft::varint, unsigned char, float> game_event = 
             {
                 minecraft::varint(0x22), 13, 0.0f
             };
-            send_packet(game_event, user.sockfd);
+            send_check(game_event, user.sockfd);
             std::tuple<minecraft::varint, float, bool> tick_state =
             {
                 minecraft::varint(0x71), 20.0f, false
             };
-            send_packet(tick_state, user.sockfd);
+            send_check(tick_state, user.sockfd);
             send_chunk(user, user.chunk_pos.x, user.chunk_pos.z);
             std::thread send_world_th(send_world, std::ref(user));
             send_world_th.detach();  
@@ -1056,7 +1057,7 @@ void execute_packet(packet pkt, User &user)
                     minecraft::varint(0x05), std::get<3>(player_action)
                 };
                 if (user.loading == false)
-                    send_packet(awk_block, user.sockfd);
+                    send_check(awk_block, user.sockfd);
                 World.place_block(x, y, z, minecraft::varint(0));
             }
             log("Removed block");
@@ -1175,7 +1176,7 @@ void execute_packet(packet pkt, User &user)
                 minecraft::varint(0x05), std::get<7>(use_item_on)
             };
             if (user.loading == false)
-                send_packet(awk_block, user.sockfd);
+                send_check(awk_block, user.sockfd);
             log("Placed block");
         }
     }
@@ -1293,7 +1294,11 @@ int main(int argc, char *argv[])
         {
             user.second.prev_pos = user.second.pos;
         }
-        update_visible_chunks();
+        for (auto user: users)
+        {
+            std::thread ch_th(update_visible_chunks, user.second);
+            ch_th.detach();
+        }
         update_keep_alive();
         time_ticks++;
         const ms duration = clock::now() - before;
