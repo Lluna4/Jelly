@@ -139,7 +139,8 @@ class User
             char *buf = (char *)calloc(1024, sizeof(char));
             std::tuple<int, int, int, minecraft::uuid, minecraft::string, minecraft::string, minecraft::string, double, double, double, int, int, float, float, bool, bool, bool> data;
             read(fd, buf, 1024);
-            data = read_packet(data, buf);
+            packet pkt_internal = {.id = 0, .size = 1024, .buf_size =1024, .data = buf, .start_data = buf, .sock = 0};
+            data = read_packet(data, pkt_internal);
             //render_distance = std::get<2>(data);
             pronouns = std::get<5>(data).str;
             //locale = std::get<6>(data).str;
@@ -741,7 +742,7 @@ void execute_packet(packet pkt, User &user)
         {
             case 0:
                 std::tuple<minecraft::varint, minecraft::string, unsigned short, minecraft::varint> handshake;
-                handshake = read_packet(handshake, pkt.data);
+                handshake = read_packet(handshake, pkt);
                 log(std::format("Got a handshake packet, version: {}, address {}, port {}, state {}", 
                 std::get<0>(handshake).num, std::get<1>(handshake).str, std::get<2>(handshake), std::get<3>(handshake).num));
                 user.state = std::get<3>(handshake).num;
@@ -759,7 +760,7 @@ void execute_packet(packet pkt, User &user)
         {
 
             std::tuple<long> ping;
-            ping = read_packet(ping, pkt.data);
+            ping = read_packet(ping, pkt);
             send_check(std::make_tuple(minecraft::varint(1), std::get<0>(ping)), user.sockfd);
         }
     }
@@ -768,7 +769,7 @@ void execute_packet(packet pkt, User &user)
         if (pkt.id == 0x0)
         {
             std::tuple<minecraft::string> login_start;
-            login_start = read_packet(login_start, pkt.data);
+            login_start = read_packet(login_start, pkt);
             user.name = std::get<0>(login_start).str;
             user.uuid.generate(user.name);
 
@@ -789,7 +790,7 @@ void execute_packet(packet pkt, User &user)
         {
             std::tuple<minecraft::string, char, minecraft::varint, 
                        bool, unsigned char, minecraft::varint, bool, bool> client_information;
-            client_information = read_packet(client_information, pkt.data);
+            client_information = read_packet(client_information, pkt);
             log(std::format("Locale {}, render distance {}, chat mode {}", std::get<0>(client_information).str, 
             (int)std::get<1>(client_information), std::get<2>(client_information).num));
             user.locale = std::get<0>(client_information).str;
@@ -929,7 +930,7 @@ void execute_packet(packet pkt, User &user)
         if (pkt.id == 0x04)
         {
             std::tuple<minecraft::string> command;
-            command = read_packet(command, pkt.data);
+            command = read_packet(command, pkt);
             std::string commands = std::get<0>(command).str;
             log(commands);
             if (commands.starts_with("pronouns"))
@@ -978,14 +979,14 @@ void execute_packet(packet pkt, User &user)
         else if (pkt.id == 0x06)
         {
             std::tuple<minecraft::string> message;
-            message = read_packet(message, pkt.data);
+            message = read_packet(message, pkt);
             std::string name = std::format("{} [{}]", user.name, user.pronouns);
             send_chat(std::get<0>(message).str, name);
         }
         else if (pkt.id == 0x1A)
         {
             std::tuple<double, double, double, bool> position_set;
-            position_set = read_packet(position_set, pkt.data);
+            position_set = read_packet(position_set, pkt);
             user.pos.x = std::get<0>(position_set);
             user.pos.y = std::get<1>(position_set);
             user.pos.z = std::get<2>(position_set);
@@ -995,7 +996,7 @@ void execute_packet(packet pkt, User &user)
         else if (pkt.id == 0x1B)
         {
             std::tuple<double, double, double, float, float ,bool> position_rotation_set;
-            position_rotation_set = read_packet(position_rotation_set, pkt.data);
+            position_rotation_set = read_packet(position_rotation_set, pkt);
             user.pos.x = std::get<0>(position_rotation_set);
             user.pos.y = std::get<1>(position_rotation_set);
             user.pos.z = std::get<2>(position_rotation_set);
@@ -1007,7 +1008,7 @@ void execute_packet(packet pkt, User &user)
         else if (pkt.id == 0x1C)
         {
             std::tuple<float, float ,bool> rotation_set;
-            rotation_set = read_packet(rotation_set, pkt.data);
+            rotation_set = read_packet(rotation_set, pkt);
             user.angle.yaw = std::get<0>(rotation_set);
             user.angle.pitch = std::get<1>(rotation_set);
             user.on_ground = std::get<2>(rotation_set);
@@ -1015,13 +1016,13 @@ void execute_packet(packet pkt, User &user)
         else if (pkt.id == 0x1D)
         {
             std::tuple<bool> set_on_ground;
-            set_on_ground = read_packet(set_on_ground, pkt.data);
+            set_on_ground = read_packet(set_on_ground, pkt);
             user.on_ground = std::get<0>(set_on_ground);
         }
         else if (pkt.id == 0x36)
         {
             std::tuple<minecraft::varint> swing_arm;
-            swing_arm = read_packet(swing_arm, pkt.data);
+            swing_arm = read_packet(swing_arm, pkt);
             unsigned char anim = 0;
             if (std::get<0>(swing_arm).num == 1)
                 anim = 3;
@@ -1035,7 +1036,7 @@ void execute_packet(packet pkt, User &user)
         else if (pkt.id == 0x24)
         {
             std::tuple<minecraft::varint, long, char, minecraft::varint> player_action;
-            player_action = read_packet(player_action, pkt.data);
+            player_action = read_packet(player_action, pkt);
             long val = std::get<1>(player_action);
             std::int32_t x = val >> 38;
             std::int32_t y = val << 52 >> 52;
@@ -1068,7 +1069,7 @@ void execute_packet(packet pkt, User &user)
         else if (pkt.id == 0x18)
         {
             std::tuple<long> keep_alive_response;
-            keep_alive_response = read_packet(keep_alive_response, pkt.data);
+            keep_alive_response = read_packet(keep_alive_response, pkt);
             if (std::get<0>(keep_alive_response) == 12324)
             {
                 user.ticks_to_keep_alive = 200;
@@ -1082,7 +1083,7 @@ void execute_packet(packet pkt, User &user)
         else if (pkt.id == 0x2F)
         {
             std::tuple<short> set_held_item;
-            set_held_item = read_packet(set_held_item, pkt.data);
+            set_held_item = read_packet(set_held_item, pkt);
             user.selected_inv = std::get<0>(set_held_item) + 36;
             auto set_equipment = std::make_tuple(minecraft::varint(0x5B), minecraft::varint(user.sockfd), (char)0, 
             minecraft::varint(1), minecraft::varint(user.inventory_item[user.selected_inv]), minecraft::varint(0), minecraft::varint(0));
@@ -1091,12 +1092,12 @@ void execute_packet(packet pkt, User &user)
         else if (pkt.id == 0x32)
         {
             std::tuple<short, minecraft::varint> set_slot;
-            set_slot = read_packet(set_slot, pkt.data);
+            set_slot = read_packet(set_slot, pkt);
             pkt.data += 3;
             if (std::get<1>(set_slot).num > 0)
             {
                 std::tuple<minecraft::varint> item_id;
-                item_id = read_packet(item_id, pkt.data);
+                item_id = read_packet(item_id, pkt);
                 log(std::format("Got {} items with id {}", std::get<1>(set_slot).num, std::get<0>(item_id).num));
                 std::string name = items[std::get<0>(item_id).num]["name"];
                 log(std::format("name is {}", name), INFO);
@@ -1125,7 +1126,7 @@ void execute_packet(packet pkt, User &user)
         else if (pkt.id == 0x38)
         {
             std::tuple<minecraft::varint, long, minecraft::varint, float, float, float, bool, minecraft::varint> use_item_on;
-            use_item_on = read_packet(use_item_on, pkt.data);
+            use_item_on = read_packet(use_item_on, pkt);
             long val = std::get<1>(use_item_on);
             int x = val >> 38;
             int y = val << 52 >> 52;

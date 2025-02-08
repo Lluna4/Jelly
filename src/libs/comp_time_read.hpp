@@ -55,10 +55,13 @@ minecraft::varint read_varint(char *v)
 template<typename T>
 struct read_var
 {
-    static T call(char** v)
+    static T call(char_size* v)
     {
-        T ret = read_type<T>(*v);
-        *v += sizeof(T);
+        if (sizeof(T) + v->consumed_size > v->max_size)
+            return T{};
+        T ret = read_type<T>(v->data);
+        v->data += sizeof(T);
+        v->consumed_size += sizeof(T);
         return ret;
     }
 };
@@ -66,10 +69,13 @@ struct read_var
 template<>
 struct read_var<minecraft::varint>
 {
-    static minecraft::varint call(char **v)
+    static minecraft::varint call(char_size *v)
     {
-        minecraft::varint ret = read_varint(*v);
-        *v += ret.size;
+        if (1 + v->consumed_size > v->max_size)
+            return minecraft::varint(0);
+        minecraft::varint ret = read_varint(v->data);
+        v->data += ret.size;
+        v->consumed_size += ret.size;
         return ret;
     }
 };
@@ -77,11 +83,14 @@ struct read_var<minecraft::varint>
 template<>
 struct read_var<minecraft::string>
 {
-    static minecraft::string call(char **v)
+    static minecraft::string call(char_size *v)
     {
+        if (1 + v->consumed_size > v->max_size)
+            return std::string();
         minecraft::string ret; 
-        ret.len = read_string(*v, ret.str);
-        *v += ret.len;
+        ret.len = read_string(v->data, ret.str);
+        v->consumed_size += ret.len;
+        v->data += ret.len;
         return ret;
     }
 };
@@ -89,11 +98,14 @@ struct read_var<minecraft::string>
 template<>
 struct read_var<minecraft::uuid>
 {
-    static minecraft::uuid call(char **v)
+    static minecraft::uuid call(char_size *v)
     {
+        if (16 + v->consumed_size > v->max_size)
+            return minecraft::uuid();
         minecraft::uuid ret; 
         ret.generate("Not implemented");
-        *v += 16;
+        v->data += 16;
+        v->consumed_size += 16;
         return ret;
     }
 };
@@ -101,13 +113,17 @@ struct read_var<minecraft::uuid>
 template<typename ...T>
 struct read_var<std::tuple<T...>>
 {
-    static std::tuple<T...> call(char **v)
+    static std::tuple<T...> call(char_size *v)
     {
         std::tuple<T...> ret;
         constexpr std::size_t size = std::tuple_size_v<decltype(ret)>;
-        char *diff = *v;
+        if (size + v->consumed_size > v->max_size)
+            return std::tuple<T...>{};
+        char *diff = v->data;
         ret = read_comp_pkt(size, diff, ret);
-        *v += (diff - *v);
+        int size_diff =(diff - v->data); 
+        v->consumed_size += size_diff;
+        v->data += size_diff;
         return ret;
     }
 };
@@ -124,9 +140,10 @@ template <auto N, typename F> constexpr void const_for_(F&& func)
 }
 
 template<typename ...T>
-std::tuple<T...> read_packet(std::tuple<T...> packet, char *buffer)
+std::tuple<T...> read_packet(std::tuple<T...> packet, struct packet pkt)
 {
+    char_size buff = {.data = pkt.data, .consumed_size = 0, .max_size = (int)pkt.size, .start_data = pkt.data};
     constexpr std::size_t size = std::tuple_size_v<decltype(packet)>;
-    read_comp_pkt(size, buffer, packet);
+    read_comp_pkt(size, buff, packet);
     return packet;
 }

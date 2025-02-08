@@ -27,7 +27,8 @@ std::vector<packet> process_packet(char_size *pkt, int sock, int status)
 	if (*(pkt->start_data) == '\0')
 		return packets;
 	std::tuple<minecraft::varint, minecraft::varint> header;
-	header = read_packet(header, pkt->start_data);
+	packet pkt_internal = {.id = 0, .size = 1024, .buf_size =1024, .data = pkt->start_data, .start_data = pkt->start_data, .sock = 0};
+	header = read_packet(header, pkt_internal);
 	if (std::get<0>(header).num > status)
 	{
 		if (std::get<0>(header).num + pkt->consumed_size > pkt->max_size)

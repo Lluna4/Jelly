@@ -4,6 +4,7 @@
 #include <cstring>
 #include <tuple>
 #include <bitset>
+#include <unistd.h>
 #include "utils.hpp"
 #include "chunks2.hpp"
 
