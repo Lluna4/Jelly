@@ -1,5 +1,7 @@
 #include "libs/netlib.h"
 #include "libs/utils.hpp"
+#include <cstring>
+#include <sys/epoll.h>
 #include <vector>
 #include <map>
 #include <thread>
@@ -9,6 +11,7 @@
 #include <nlohmann/json.hpp>
 #include <sys/sendfile.h>
 #include <math.h>
+#include <unistd.h>
 #include "libs/comp_time_write.hpp"
 #include "libs/comp_time_read.hpp"
 #include "libs/chunks2.hpp"
@@ -1191,6 +1194,27 @@ void execute_packet(packet pkt, User &user)
     }
 }
 
+void chunk_send_th(int pipefd)
+{
+    int internal_epoll = epoll_create1(0);
+    netlib::add_to_list(pipefd, internal_epoll);
+    
+    int events_ready = 0;
+    epoll_event events[1024];
+    
+    while (true)
+    {
+        events_ready = epoll_wait(epfd, events, 1024, -1);
+        if (events_ready == -1)
+            log(std::format("Error! {}", strerror(errno)), INFO);
+        log("got signal to send chunks", INFO);
+        for (auto user: users)
+        {
+            update_visible_chunks(user.second);
+        }
+    }
+}
+
 void recv_thread()
 {
     int events_ready = 0;
@@ -1258,6 +1282,18 @@ int main(int argc, char *argv[])
 	}
 
 	generate_file_name();
+	int *pipefds = (int *)malloc(3 * sizeof(int));
+	if (pipefds == NULL)
+	{
+        log(std::format("Error allocating memory {}", strerror(errno)), ERROR);
+        return -1;
+	}
+	if (pipe(pipefds) == -1)
+	{
+	   log(std::format("Error creating pipes {}", strerror(errno)), ERROR);
+	   return -1;
+	}
+	std::thread world_th(chunk_send_th, pipefds[0]);
     epfd = epoll_create1(0);
     log(std::format("epfd is {}", epfd), INFO);
     std::thread accept_t(accept_th, sock);
@@ -1303,15 +1339,18 @@ int main(int argc, char *argv[])
         {
             user.second.prev_pos = user.second.pos;
         }
-        for (auto user: users)
+        if (users.empty() == false)
         {
-            update_visible_chunks(user.second);
+            if (write(pipefds[1], "0", 1) == -1)
+            {
+                log("Error sending to chunk pipe, probably caused by the chunk sending thread crashing", ERROR);
+            }
         }
         update_ai_position();
         update_keep_alive();
         time_ticks++;
         const ms duration = clock::now() - before;
-        log(std::format("MSPT {}ms", duration.count()), INFO);
+        //log(std::format("MSPT {}ms", duration.count()), INFO);
         if (duration.count() <= 50)
             std::this_thread::sleep_for(std::chrono::milliseconds(50) - duration);
     }
