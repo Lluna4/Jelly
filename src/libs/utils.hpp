@@ -1,4 +1,5 @@
 #pragma once
+#include <cstddef>
 #include <iostream>
 #include <string.h>
 #include <sys/socket.h>
@@ -29,6 +30,17 @@ struct packet
 		}
 		return false;
 	}
+    packet& operator=(packet rhs) 
+    { 
+        id = rhs.id;
+        size = rhs.size;
+        buf_size = rhs.buf_size;
+        data = rhs.data;
+        start_data = rhs.start_data;
+        sock = rhs.sock;
+        
+        return *this;
+    }
 };
 
 struct char_size

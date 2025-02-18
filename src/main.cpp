@@ -1,17 +1,22 @@
 #include "libs/netlib.h"
 #include "libs/utils.hpp"
+#include <algorithm>
 #include <cstring>
+#include <memory>
+#include <mutex>
 #include <sys/epoll.h>
+#include <sys/socket.h>
+#include <tuple>
 #include <vector>
 #include <map>
 #include <thread>
-#include "libs/packet_processing.hpp"
 #include <chrono>
 #include <errno.h>
 #include <nlohmann/json.hpp>
 #include <sys/sendfile.h>
 #include <math.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include "libs/comp_time_write.hpp"
 #include "libs/comp_time_read.hpp"
 #include "libs/chunks2.hpp"
@@ -194,7 +199,7 @@ struct entity
 
 std::vector<entity> ai_entities;
 
-void accept_th(int sock)
+void accept_th(int sock, std::mutex &mut)
 {
     sockaddr_in addr = {0};
     unsigned int addr_size = sizeof(addr);
@@ -205,6 +210,7 @@ void accept_th(int sock)
         netlib::add_to_list(new_client, epfd);
         struct in_addr ipAddr = addr.sin_addr;
         std::println("{} connected", inet_ntop(AF_INET, &ipAddr, str, INET_ADDRSTRLEN));
+        std::lock_guard<std::mutex> lock(mut);
         if (users.find(new_client) != users.end())
         {
             users.erase(new_client);
@@ -1194,7 +1200,7 @@ void execute_packet(packet pkt, User &user)
     }
 }
 
-void chunk_send_th(int pipefd)
+void chunk_send_th(int pipefd, std::mutex &mut)
 {
     int internal_epoll = epoll_create1(0);
     netlib::add_to_list(pipefd, internal_epoll);
@@ -1207,7 +1213,8 @@ void chunk_send_th(int pipefd)
         events_ready = epoll_wait(epfd, events, 1024, -1);
         if (events_ready == -1)
             log(std::format("Error! {}", strerror(errno)), INFO);
-        log("got signal to send chunks", INFO);
+        //log("got signal to send chunks", INFO);
+        std::lock_guard<std::mutex> lock(mut);
         for (auto user: users)
         {
             update_visible_chunks(user.second);
@@ -1215,44 +1222,88 @@ void chunk_send_th(int pipefd)
     }
 }
 
-void recv_thread()
+void recv_thread(std::mutex &mut)
 {
     int events_ready = 0;
     epoll_event events[1024];
-    char *main_buffer = (char *)calloc(4096, sizeof(char));
-    char_size buff = {.data = main_buffer, .consumed_size = 0, .max_size = 4096, .start_data = main_buffer};
-
+    char *buffer = (char *)calloc(4096, sizeof(char));
+    int status = 0;
+    int alloc_max = 4096;
     while (true)
     {
         events_ready = epoll_wait(epfd, events, 1024, -1);
         if (events_ready == -1)
-            log(std::format("Error! {}", strerror(errno)), INFO);
-        //log("Events ready ", events_ready);
-        for (int i = 0; i < events_ready;i++)
+            log(std::format("Epoll error! {}", strerror(errno)), ERROR);
+        for (int i = 0; i < events_ready; i++)
         {
             int current_fd = events[i].data.fd;
-            int status = recv(current_fd, buff.data, 1024, 0);
-            buff.data += status;
-            //log("status: ", status);
+            status = recv(current_fd, buffer, 10, MSG_PEEK);
             if (status == -1 || status == 0)
             {
                 disconnect_user(current_fd);
+                continue;
             }
-
-            
-            std::vector<packet> packets = process_packet(&buff, current_fd, status);
-            //log("read ", packets.size(), " packets");
-            for (auto pack: packets)
+            std::tuple<minecraft::varint, minecraft::varint> header;
+            packet pkt_internal = {.id = 0, .size = 4096, .buf_size = 4096, .data = buffer, .start_data = buffer, .sock = 0};
+            header = read_packet(header, pkt_internal);
+            bool user_disconnect = false;
+            if (std::get<0>(header).num + std::get<0>(header).size <= 10)
             {
-                if (pack.id == 0x1 && pack.size == 9)
+                status = recv(current_fd, buffer, status, 0);
+                if (status == -1 || status == 0)
                 {
-                    execute_packet(pack, users.find(current_fd)->second);
+                    disconnect_user(current_fd);
                     continue;
                 }
-                users.find(current_fd)->second.tick_packets.push_back(pack);
             }
-            memset(buff.start_data, 0, 4096);
-            buff.data = buff.start_data;
+            else if (std::get<0>(header).num + std::get<0>(header).size <= alloc_max)
+            {
+                int data_recv = 0;
+                while (data_recv < std::get<0>(header).num + std::get<0>(header).size)
+                {
+                    int data_left = (std::get<0>(header).num + std::get<0>(header).size) - data_recv; 
+                    status = recv(current_fd, &buffer[data_recv], data_left, 0);
+                    if (status == -1 || status == 0)
+                    {
+                        disconnect_user(current_fd);
+                        user_disconnect = true;
+                        break;
+                    }
+                    data_recv += status;
+                }
+            }
+            else 
+            {
+                buffer = (char *)realloc(buffer, std::get<0>(header).num + std::get<0>(header).size * sizeof(char));
+                alloc_max = std::get<0>(header).num + std::get<0>(header).size * sizeof(char);
+                log(std::format("Reallocated buffer to {}B", alloc_max), INFO);
+                int data_recv = 0;
+                while (data_recv < std::get<0>(header).num + std::get<0>(header).size)
+                {
+                    int data_left = (std::get<0>(header).num + std::get<0>(header).size) - data_recv; 
+                    status = recv(current_fd, &buffer[data_recv], data_left, 0);
+                    if (status == -1 || status == 0)
+                    {
+                        disconnect_user(current_fd);
+                        user_disconnect = true;
+                        break;
+                    }
+                    data_recv += status;
+                }
+            }
+            if (user_disconnect == true)
+                continue;
+            packet pkt;
+            int header_size = std::get<0>(header).size + std::get<1>(header).size;
+            int data_size = status - header_size;
+            pkt.id = std::get<1>(header).num;
+            pkt.size = std::get<0>(header).num;
+            pkt.data = mem_dup(buffer + header_size, data_size);
+            pkt.start_data = pkt.data;
+            pkt.buf_size = data_size;
+            pkt.sock = current_fd;
+            std::lock_guard<std::mutex> lock(mut);
+            users.find(current_fd)->second.tick_packets.push_back(pkt);
         }
     }
 }
@@ -1269,6 +1320,7 @@ int main(int argc, char *argv[])
     load_config();
     srandom(time(NULL));
     s = random();
+    std::mutex user_mut;
     int sock = netlib::init_server(SV_IP, SV_PORT);
     if (sock == -1)
     {
@@ -1293,12 +1345,12 @@ int main(int argc, char *argv[])
 	   log(std::format("Error creating pipes {}", strerror(errno)), ERROR);
 	   return -1;
 	}
-	std::thread world_th(chunk_send_th, pipefds[0]);
+	std::thread world_th(chunk_send_th, pipefds[0], std::ref(user_mut));
     epfd = epoll_create1(0);
     log(std::format("epfd is {}", epfd), INFO);
-    std::thread accept_t(accept_th, sock);
+    std::thread accept_t(accept_th, sock, std::ref(user_mut));
     accept_t.detach();
-    std::thread read_t(recv_thread);
+    std::thread read_t(recv_thread, std::ref(user_mut));
     read_t.detach();
     
     for (int z = -12; z < 12; z++)
@@ -1319,8 +1371,10 @@ int main(int argc, char *argv[])
     while (true)
     {   
         const auto before = clock::now();
+        user_mut.lock();
         for (auto &user: users)
         {
+            //log(std::format("size {}", user.second.tick_packets.size()), INFO);
             for (int i = 0; i < user.second.tick_packets.size();i++)
             {
                 packet pack = user.second.tick_packets[i];     
@@ -1348,9 +1402,10 @@ int main(int argc, char *argv[])
         }
         update_ai_position();
         update_keep_alive();
+        user_mut.unlock();
         time_ticks++;
         const ms duration = clock::now() - before;
-        //log(std::format("MSPT {}ms", duration.count()), INFO);
+        log(std::format("MSPT {}ms", duration.count()), INFO);
         if (duration.count() <= 50)
             std::this_thread::sleep_for(std::chrono::milliseconds(50) - duration);
     }
