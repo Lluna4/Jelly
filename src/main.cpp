@@ -1304,6 +1304,7 @@ void recv_thread(std::mutex &mut)
             pkt.sock = current_fd;
             std::lock_guard<std::mutex> lock(mut);
             users.find(current_fd)->second.tick_packets.push_back(pkt);
+            memset(buffer, 0, alloc_max);
         }
     }
 }
