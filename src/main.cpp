@@ -1272,21 +1272,18 @@ void recv_thread(std::mutex &mut)
             else if (std::get<0>(header).num + std::get<0>(header).size <= alloc_max)
             {
                 int data_recv = 0;
-                int data_left = std::get<0>(header).num + std::get<0>(header).size;
-                int count = 0;
-                while (count < data_left)
+                while (data_recv < std::get<0>(header).num + std::get<0>(header).size)
                 {
-                    ioctl(current_fd, FIONREAD, &count);
-                    log(std::format("Count {}", count), INFO);
+                    int data_left = (std::get<0>(header).num + std::get<0>(header).size) - data_recv; 
+                    status = recv(current_fd, &buffer[data_recv], data_left, 0);
+                    if (status == -1 || status == 0)
+                    {
+                        disconnect_user(current_fd);
+                        user_disconnect = true;
+                        break;
+                    }
+                    data_recv += status;
                 }
-                status = recv(current_fd, buffer, data_left, 0);
-                if (status == -1 || status == 0)
-                {
-                    disconnect_user(current_fd);
-                    user_disconnect = true;
-                    break;
-                }
-                data_recv += status;
             }
             else 
             {
@@ -1294,21 +1291,18 @@ void recv_thread(std::mutex &mut)
                 alloc_max = std::get<0>(header).num + std::get<0>(header).size * sizeof(char);
                 log(std::format("Reallocated buffer to {}B", alloc_max), INFO);
                 int data_recv = 0;
-                int data_left = std::get<0>(header).num + std::get<0>(header).size;
-                int count = 0;
-                while (count < data_left)
+                while (data_recv < std::get<0>(header).num + std::get<0>(header).size)
                 {
-                    ioctl(current_fd, FIONREAD, &count);
-                    log(std::format("Count 2 {} data left {}", count, data_left), INFO);
+                    int data_left = (std::get<0>(header).num + std::get<0>(header).size) - data_recv; 
+                    status = recv(current_fd, &buffer[data_recv], data_left, 0);
+                    if (status == -1 || status == 0)
+                    {
+                        disconnect_user(current_fd);
+                        user_disconnect = true;
+                        break;
+                    }
+                    data_recv += status;
                 }
-                status = recv(current_fd, buffer, data_left, 0);
-                if (status == -1 || status == 0)
-                {
-                    disconnect_user(current_fd);
-                    user_disconnect = true;
-                    break;
-                }
-                data_recv += status;
             }
             if (user_disconnect == true)
                 continue;
