@@ -186,11 +186,13 @@ struct chunk
 			sections.emplace_back(i, true);
 		}
 		generated = false;
+		heights.resize(16*16);
 	}
 	std::vector<section> sections;
 	int x, z;
 	bool generated;
 	std::vector<position_int> trees;
+	std::vector<int> heights;
 	void place_block(int x, int y, int z, minecraft::varint block_id)
 	{
 		int section = (y + 64)/16;
@@ -272,6 +274,7 @@ struct world
 						}
 					}
 				}
+				chunk.heights[z_ * 16 + x_] = height_;
 				//log(height_, INFO);
 				for (int y = 16; y < height_; y++)
 				{
@@ -356,6 +359,12 @@ struct world
 	{
 		auto &chunk = generate_chunk(floor((float)x/16.0f), floor((float)z/16.0f));
 		chunk.place_block(rem_euclid(x, 16), y, rem_euclid(z, 16), block_id);
+	}
+	
+	int get_height(int x, int z)
+	{
+	    auto &chunk = generate_chunk(floor((float)x/16.0f), floor((float)z/16.0f));
+		return chunk.heights[rem_euclid(z, 16) * 16 + rem_euclid(z, 16)];
 	}
 
 	void place_tree(position_int pos)

@@ -1,6 +1,7 @@
 #include "libs/netlib.h"
 #include "libs/utils.hpp"
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <memory>
 #include <mutex>
@@ -964,25 +965,36 @@ void execute_packet(packet pkt, User &user)
             }
             if (commands.starts_with("overwhelmed"))
             {
-                user.overwhelmed = true;
-                if (user.pronouns.contains("/") == true)
+                if (user.overwhelmed)
                 {
-                    std::vector<std::string> res = tokenize(user.pronouns, '/');
-                    if (res.size() > 0)
+                    message_locale conn_msg({{"english", std::format("{} is no longer overwhelmed", user.name)},
+                                             {"spanish", std::format("{} ya no esta sobrecargade", user.name)},
+                                             {"catalan", std::format("{} ya no esta sobrecargdi", user.name)}}, std::format("{} is no longer overwhelmed", user.name));
+                    system_chat(conn_msg);
+                    user.overwhelmed = false;
+                }
+                else 
+                {
+                    user.overwhelmed = true;
+                    if (user.pronouns.contains("/") == true)
                     {
-                        if (res[0].compare("they") == 0)
-                            res[0] = "them";
-                        else if (res[0].compare("she") == 0)
-                            res[0] = "her";
-                        else if (res[0].compare("he") == 0)
-                            res[0] = "him";
-                        send_chat(std::format("{} is overwhelmed and will not see the chat, please keep interaction with {} as low as possible", user.name, res[0]), "SERVER [it/its]");
+                        std::vector<std::string> res = tokenize(user.pronouns, '/');
+                        if (res.size() > 0)
+                        {
+                            if (res[0].compare("they") == 0)
+                                res[0] = "them";
+                            else if (res[0].compare("she") == 0)
+                                res[0] = "her";
+                            else if (res[0].compare("he") == 0)
+                                res[0] = "him";
+                            system_chat(std::format("{} is overwhelmed and will not see the chat, please keep interaction with {} as low as possible", user.name, res[0]));
+                        }
+                        else
+                            system_chat(std::format("{} is overwhelmed and will not see the chat, please keep interaction with them as low as possible", user.name));
                     }
                     else
-                        send_chat(std::format("{} is overwhelmed and will not see the chat, please keep interaction with them as low as possible", user.name), "SERVER [it/its]");
+                        system_chat(std::format("{} is overwhelmed and will not see the chat, please keep interaction with them as low as possible", user.name));
                 }
-                else
-                    send_chat(std::format("{} is overwhelmed and will not see the chat, please keep interaction with them as low as possible", user.name), "SERVER [it/its]");
             }
         }
         else if (pkt.id == 0x06)
@@ -1249,7 +1261,8 @@ void recv_thread(std::mutex &mut)
             bool user_disconnect = false;
             if (std::get<0>(header).num + std::get<0>(header).size <= 10)
             {
-                status = recv(current_fd, buffer, status, 0);
+                int data_left = std::get<0>(header).num + std::get<0>(header).size;
+                status = recv(current_fd, buffer, data_left, 0);
                 if (status == -1 || status == 0)
                 {
                     disconnect_user(current_fd);
@@ -1259,18 +1272,21 @@ void recv_thread(std::mutex &mut)
             else if (std::get<0>(header).num + std::get<0>(header).size <= alloc_max)
             {
                 int data_recv = 0;
-                while (data_recv < std::get<0>(header).num + std::get<0>(header).size)
+                int data_left = std::get<0>(header).num + std::get<0>(header).size;
+                int count = 0;
+                while (count < data_left)
                 {
-                    int data_left = (std::get<0>(header).num + std::get<0>(header).size) - data_recv; 
-                    status = recv(current_fd, &buffer[data_recv], data_left, 0);
-                    if (status == -1 || status == 0)
-                    {
-                        disconnect_user(current_fd);
-                        user_disconnect = true;
-                        break;
-                    }
-                    data_recv += status;
+                    ioctl(current_fd, FIONREAD, &count);
+                    log(std::format("Count {}", count), INFO);
                 }
+                status = recv(current_fd, buffer, data_left, 0);
+                if (status == -1 || status == 0)
+                {
+                    disconnect_user(current_fd);
+                    user_disconnect = true;
+                    break;
+                }
+                data_recv += status;
             }
             else 
             {
@@ -1278,18 +1294,21 @@ void recv_thread(std::mutex &mut)
                 alloc_max = std::get<0>(header).num + std::get<0>(header).size * sizeof(char);
                 log(std::format("Reallocated buffer to {}B", alloc_max), INFO);
                 int data_recv = 0;
-                while (data_recv < std::get<0>(header).num + std::get<0>(header).size)
+                int data_left = std::get<0>(header).num + std::get<0>(header).size;
+                int count = 0;
+                while (count < data_left)
                 {
-                    int data_left = (std::get<0>(header).num + std::get<0>(header).size) - data_recv; 
-                    status = recv(current_fd, &buffer[data_recv], data_left, 0);
-                    if (status == -1 || status == 0)
-                    {
-                        disconnect_user(current_fd);
-                        user_disconnect = true;
-                        break;
-                    }
-                    data_recv += status;
+                    ioctl(current_fd, FIONREAD, &count);
+                    log(std::format("Count 2 {} data left {}", count, data_left), INFO);
                 }
+                status = recv(current_fd, buffer, data_left, 0);
+                if (status == -1 || status == 0)
+                {
+                    disconnect_user(current_fd);
+                    user_disconnect = true;
+                    break;
+                }
+                data_recv += status;
             }
             if (user_disconnect == true)
                 continue;
@@ -1333,20 +1352,20 @@ int main(int argc, char *argv[])
 		std::filesystem::create_directory("logs");
 		log("Created logging folder!");
 	}
-
 	generate_file_name();
-	int *pipefds = (int *)malloc(3 * sizeof(int));
-	if (pipefds == NULL)
-	{
+    log("Starting chunk thread", INFO);
+    int *pipefds = (int *)malloc(3 * sizeof(int));
+    if (pipefds == NULL)
+    {
         log(std::format("Error allocating memory {}", strerror(errno)), ERROR);
         return -1;
-	}
-	if (pipe(pipefds) == -1)
-	{
-	   log(std::format("Error creating pipes {}", strerror(errno)), ERROR);
-	   return -1;
-	}
-	std::thread world_th(chunk_send_th, pipefds[0], std::ref(user_mut));
+    }
+    if (pipe(pipefds) == -1)
+    {
+    log(std::format("Error creating pipes {}", strerror(errno)), ERROR);
+    return -1;
+    }
+    std::thread world_th(chunk_send_th, pipefds[0], std::ref(user_mut));
     epfd = epoll_create1(0);
     log(std::format("epfd is {}", epfd), INFO);
     std::thread accept_t(accept_th, sock, std::ref(user_mut));
@@ -1382,10 +1401,10 @@ int main(int argc, char *argv[])
                 log(std::format("Got a packet with id {} and size {}", pack.id, pack.size));
                 execute_packet(pack, user.second);
                 free(pack.start_data);
-                user.second.tick_packets.erase(user.second.tick_packets.begin() + i);
+                //user.second.tick_packets.erase(user.second.tick_packets.begin() + i);
             }
+            user.second.tick_packets.clear();
         }
-        //tick_packets.clear();
         for (auto user: users)
         {
             update_players_position(user.second);

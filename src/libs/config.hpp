@@ -52,6 +52,7 @@ void create_config()
     cfg << "motd=A Minecraft Server\n";
     cfg << "icon-path=favicon.png\n";
     cfg << "server-render-distance=8\n";
+    cfg << "threaded-chunks=true\n";
     cfg.close();
 }
 
