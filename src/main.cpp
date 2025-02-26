@@ -2,6 +2,7 @@
 #include "libs/utils.hpp"
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <memory>
 #include <mutex>
@@ -71,7 +72,29 @@ struct angles
     float yaw, pitch;
 };
 
+struct system_person
+{
+    system_person(std::string name_, std::string pronouns_)
+    :name(name_), pronouns(pronouns_)
+    {}
+    std::string name;
+    std::string pronouns;
+};
 
+struct system_users
+{
+    system_users()
+    {
+        name = "Default";
+        tag = "DFT";
+    }
+    system_users(std::string name_, std::string tag_)
+    :name(name_), tag(tag_)
+    {}
+    std::map<std::string, system_person> map_users;
+    std::string name;
+    std::string tag;
+};
 
 class User
 {
@@ -99,6 +122,7 @@ class User
             loading = false;
             ticks_since_keep_alive = 0;
             ticks_to_keep_alive = 200;
+            system_created = false;
         }
         int selected_inv;
         int state;
@@ -117,6 +141,8 @@ class User
         int sockfd;
         bool overwhelmed;
         bool loading;
+        system_users system;
+        bool system_created;
         std::vector<unsigned long> inventory;
         std::vector<unsigned long> inventory_item;
         int ticks_to_keep_alive;
@@ -162,7 +188,7 @@ class User
             angle.yaw = std::get<12>(data);
             on_ground = std::get<13>(data);
             sneaking = std::get<14>(data);
-            overwhelmed = std::get<15>(data);
+            //overwhelmed = std::get<15>(data);
             close(fd);
             free(buf);
         }
@@ -839,11 +865,20 @@ void execute_packet(packet pkt, User &user)
             };
             send_check(login, user.sockfd);
 
-            auto commands = std::make_tuple(minecraft::varint(0x11), minecraft::varint(4),
-                    std::make_tuple((char)0x00, minecraft::varint(3), minecraft::varint(1), minecraft::varint(2), minecraft::varint(3)),
+            auto commands = std::make_tuple(minecraft::varint(0x11), minecraft::varint(13),
+                    std::make_tuple((char)0x00, minecraft::varint(4), minecraft::varint(1), minecraft::varint(2), minecraft::varint(3), minecraft::varint(4)),
                     std::make_tuple((char)0x01, minecraft::varint(1), minecraft::varint(2), minecraft::string("pronouns")),
                     std::make_tuple((char)0x02, minecraft::varint(0), minecraft::string("pronouns"), minecraft::varint(5), minecraft::varint(2)),
                     std::make_tuple((char)0x01, minecraft::varint(0), minecraft::string("overwhelmed")),
+                    std::make_tuple((char)0x01, minecraft::varint(3), minecraft::varint(5), minecraft::varint(6), minecraft::varint(10), minecraft::string("system")),
+                    std::make_tuple((char)0x01, minecraft::varint(1), minecraft::varint(7), minecraft::string("add")),
+                    std::make_tuple((char)0x01, minecraft::varint(1), minecraft::varint(8), minecraft::string("set")),
+                    std::make_tuple((char)0x02, minecraft::varint(1), minecraft::varint(9), minecraft::string("name"), minecraft::varint(5), minecraft::varint(2)),
+                    std::make_tuple((char)0x02, minecraft::varint(0), minecraft::string("name"), minecraft::varint(5), minecraft::varint(2)),
+                    std::make_tuple((char)0x02, minecraft::varint(0), minecraft::string("pronouns"), minecraft::varint(5), minecraft::varint(2)),
+                    std::make_tuple((char)0x01, minecraft::varint(1), minecraft::varint(11), minecraft::string("create")),
+                    std::make_tuple((char)0x02, minecraft::varint(1), minecraft::varint(12), minecraft::string("name"), minecraft::varint(5), minecraft::varint(2)),
+                    std::make_tuple((char)0x02, minecraft::varint(0), minecraft::string("tag"), minecraft::varint(5), minecraft::varint(2)),
                     minecraft::varint(0));
 
             send_check(commands, user.sockfd);
@@ -996,12 +1031,75 @@ void execute_packet(packet pkt, User &user)
                         system_chat(std::format("{} is overwhelmed and will not see the chat, please keep interaction with them as low as possible", user.name));
                 }
             }
+            if (commands.starts_with("system add") && user.system_created == true)
+            {
+                std::vector<std::string> tokens = tokenize(commands);
+                if (tokens.size() != 4)
+                {
+                    return;
+                }
+                user.system.map_users.emplace(tokens[2], system_person(tokens[2], tokens[3]));
+                message_locale conn_msg({{"english", std::format("{} added to the system", tokens[2])},
+                                         {"spanish", std::format("{} añadide al sistema", tokens[2])},
+                                         {"catalan", std::format("{} afegidi al sistema", tokens[2])}}, std::format("{} added to the system", tokens[2]));
+                system_chat(conn_msg);
+            }
+            if (commands.starts_with("system set") && user.system_created == true)
+            {
+                std::vector<std::string> tokens = tokenize(commands);
+                if (tokens.size() != 3)
+                {
+                    return;
+                }
+                auto person = user.system.map_users.find(tokens[2]);
+                if (person == user.system.map_users.end())
+                {
+                    message_locale conn_msg({{"english", std::format("{} doesn't exist in the system", tokens[2])},
+                                             {"spanish", std::format("{} no existe en el sistem", tokens[2])},
+                                             {"catalan", std::format("{} no existeix en el sistema", tokens[2])}}, std::format("{} doesn't exist in the system", tokens[2]));
+                    system_chat(conn_msg);
+                    return;
+                }
+                user.name = tokens[2];
+                user.pronouns = person->second.pronouns;
+                std::string user_name = std::format("{} <{}> [{}]", user.name, user.system.tag ,user.pronouns);
+                std::tuple<minecraft::varint, char, minecraft::varint, minecraft::uuid,
+                        minecraft::string, minecraft::varint, bool ,bool, minecraft::string_tag> info_update_head_user =
+                        {
+                            minecraft::varint(0x3E), 0x01 |0x08 | 0x20, minecraft::varint(1), user.uuid, 
+                            minecraft::string(user.name), minecraft::varint(0), true, true,
+                            minecraft::string_tag(user_name)
+                        };
+                send_everyone(info_update_head_user);
+                message_locale conn_msg({{"english", std::format("Set to {}", tokens[2])},
+                                         {"spanish", std::format("Cambiado a {}", tokens[2])},
+                                         {"catalan", std::format("Canviat a {}", tokens[2])}}, std::format("Set to {}", tokens[2]));
+                system_chat(conn_msg);
+            }
+            if (commands.starts_with("system create") && user.system_created == false)
+            {
+                std::vector<std::string> tokens = tokenize(commands);
+                if (tokens.size() != 4)
+                {
+                    return;
+                }
+                user.system = system_users(tokens[2], tokens[3]);
+                message_locale conn_msg({{"english", std::format("Created {} system with tag {}", tokens[2], tokens[3])},
+                                         {"spanish", std::format("Se creo el sistema con nombre {} y tag {}", tokens[2], tokens[3])},
+                                         {"catalan", std::format("S'ha creat el sistema amb nom {} y tag {}", tokens[2], tokens[3])}}, std::format("Created {} system with tag {}", tokens[2], tokens[3]));
+                system_chat(conn_msg);
+                user.system_created = true;
+            }
         }
         else if (pkt.id == 0x06)
         {
             std::tuple<minecraft::string> message;
             message = read_packet(message, pkt);
-            std::string name = std::format("{} [{}]", user.name, user.pronouns);
+            std::string name;
+            if (user.system_created == false)
+                name = std::format("{} [{}]", user.name, user.pronouns);
+            if (user.system_created == true)
+                name = std::format("{} <{}> [{}]", user.name, user.system.tag ,user.pronouns);
             send_chat(std::get<0>(message).str, name);
         }
         else if (pkt.id == 0x1A)
