@@ -6,7 +6,9 @@
 #include <cstring>
 #include <memory>
 #include <mutex>
-#include <sys/epoll.h>
+#include <sys/types.h>
+#include <sys/event.h>
+#include <sys/time.h>
 #include <sys/socket.h>
 #include <tuple>
 #include <vector>
@@ -15,7 +17,7 @@
 #include <chrono>
 #include <errno.h>
 #include <nlohmann/json.hpp>
-#include <sys/sendfile.h>
+#include <sys/uio.h>
 #include <math.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -231,9 +233,11 @@ void accept_th(int sock, std::mutex &mut)
     sockaddr_in addr = {0};
     unsigned int addr_size = sizeof(addr);
     char str[INET_ADDRSTRLEN];
+    log("Listening for clients", INFO);
     while (true)
     {
         int new_client = accept(sock, (sockaddr *)&addr, &addr_size);
+        log("Client accepted", INFO);
         netlib::add_to_list(new_client, epfd);
         struct in_addr ipAddr = addr.sin_addr;
         std::println("{} connected", inet_ntop(AF_INET, &ipAddr, str, INET_ADDRSTRLEN));
@@ -380,55 +384,55 @@ void registry_data(User user)
     int fd = open("../Minecraft-DataRegistry-Packet-Generator/registries/1.21-registry/created-packets/banner_pattern.data", O_RDONLY);
     off_t file_size = lseek(fd, 0, SEEK_END);
     lseek(fd, 0, SEEK_SET);
-    sendfile(user.sockfd, fd, 0, file_size);
+    sendfile(fd, user.sockfd, 0, &file_size, NULL, 0);
     close(fd);
     
     fd = open("../Minecraft-DataRegistry-Packet-Generator/registries/1.21-registry/created-packets/chat_type.data", O_RDONLY);
     file_size = lseek(fd, 0, SEEK_END);
     lseek(fd, 0, SEEK_SET);
-    sendfile(user.sockfd, fd, 0, file_size);
+    sendfile(fd, user.sockfd, 0, &file_size, NULL, 0);
     close(fd);
     
     fd = open("../Minecraft-DataRegistry-Packet-Generator/registries/1.21-registry/created-packets/damage_type.data", O_RDONLY);
     file_size = lseek(fd, 0, SEEK_END);
     lseek(fd, 0, SEEK_SET);
-    sendfile(user.sockfd, fd, 0, file_size);
+    sendfile(fd, user.sockfd, 0, &file_size, NULL, 0);
     close(fd);
     
     fd = open("../Minecraft-DataRegistry-Packet-Generator/registries/1.21-registry/created-packets/dimension_type.data", O_RDONLY);
     file_size = lseek(fd, 0, SEEK_END);
     lseek(fd, 0, SEEK_SET);
-    sendfile(user.sockfd, fd, 0, file_size);
+    sendfile(fd, user.sockfd, 0, &file_size, NULL, 0);
     close(fd);
 
     fd = open("../Minecraft-DataRegistry-Packet-Generator/registries/1.21-registry/created-packets/painting_variant.data", O_RDONLY);
     file_size = lseek(fd, 0, SEEK_END);
     lseek(fd, 0, SEEK_SET);
-    sendfile(user.sockfd, fd, 0, file_size);
+    sendfile(fd, user.sockfd, 0, &file_size, NULL, 0);
     close(fd);
 
     fd = open("../Minecraft-DataRegistry-Packet-Generator/registries/1.21-registry/created-packets/trim_material.data", O_RDONLY);
     file_size = lseek(fd, 0, SEEK_END);
     lseek(fd, 0, SEEK_SET);
-    sendfile(user.sockfd, fd, 0, file_size);
+    sendfile(fd, user.sockfd, 0, &file_size, NULL, 0);
     close(fd);
 
     fd = open("../Minecraft-DataRegistry-Packet-Generator/registries/1.21-registry/created-packets/trim_pattern.data", O_RDONLY);
     file_size = lseek(fd, 0, SEEK_END);
     lseek(fd, 0, SEEK_SET);
-    sendfile(user.sockfd, fd, 0, file_size);
+    sendfile(fd, user.sockfd, 0, &file_size, NULL, 0);
     close(fd);
 
     fd = open("../Minecraft-DataRegistry-Packet-Generator/registries/1.21-registry/created-packets/wolf_variant.data", O_RDONLY);
     file_size = lseek(fd, 0, SEEK_END);
     lseek(fd, 0, SEEK_SET);
-    sendfile(user.sockfd, fd, 0, file_size);
+    sendfile(fd, user.sockfd, 0, &file_size, NULL, 0);
     close(fd);
 
     fd = open("../Minecraft-DataRegistry-Packet-Generator/registries/1.21-registry/created-packets/worldgen/biome.data", O_RDONLY);
     file_size = lseek(fd, 0, SEEK_END);
     lseek(fd, 0, SEEK_SET);
-    sendfile(user.sockfd, fd, 0, file_size);
+    sendfile(fd, user.sockfd, 0, &file_size, NULL, 0);
     close(fd);
 }
 
@@ -745,7 +749,7 @@ void update_keep_alive()
                 send_check(keep_alive, user.second.sockfd);
                 user.second.ticks_to_keep_alive--;
             }
-            else if (user.second.ticks_to_keep_alive < 0)
+            else if (user.second.ticks_to_keep_alive < 0 && user.second.loading == false)
             {
                 if (user.second.ticks_since_keep_alive > 600)
                 {
@@ -1312,15 +1316,20 @@ void execute_packet(packet pkt, User &user)
 
 void chunk_send_th(int pipefd, std::mutex &mut)
 {
-    int internal_epoll = epoll_create1(0);
-    netlib::add_to_list(pipefd, internal_epoll);
+    int kq;
+    if ((kq = kqueue()) == -1) 
+    {
+       perror("kqueue");
+       exit(EXIT_FAILURE);
+    }
+    netlib::add_to_list(pipefd, kq);
     
     int events_ready = 0;
-    epoll_event events[1024];
+    struct kevent events[1024];
     
     while (true)
     {
-        events_ready = epoll_wait(epfd, events, 1024, -1);
+        events_ready = kevent(kq, NULL, 0, events, 1024, NULL);
         if (events_ready == -1)
             log(std::format("Error! {}", strerror(errno)), INFO);
         //log("got signal to send chunks", INFO);
@@ -1335,18 +1344,18 @@ void chunk_send_th(int pipefd, std::mutex &mut)
 void recv_thread(std::mutex &mut)
 {
     int events_ready = 0;
-    epoll_event events[1024];
+    struct kevent events[1024];
     char *buffer = (char *)calloc(4096, sizeof(char));
     int status = 0;
     int alloc_max = 4096;
     while (true)
     {
-        events_ready = epoll_wait(epfd, events, 1024, -1);
+        events_ready = kevent(epfd, NULL, 0, events, 1024, NULL);
         if (events_ready == -1)
             log(std::format("Epoll error! {}", strerror(errno)), ERROR);
         for (int i = 0; i < events_ready; i++)
         {
-            int current_fd = events[i].data.fd;
+            int current_fd = events[i].ident;
             status = recv(current_fd, buffer, 10, MSG_PEEK);
             if (status == -1 || status == 0)
             {
@@ -1458,7 +1467,7 @@ int main(int argc, char *argv[])
     return -1;
     }
     std::thread world_th(chunk_send_th, pipefds[0], std::ref(user_mut));
-    epfd = epoll_create1(0);
+    epfd = kqueue();
     log(std::format("epfd is {}", epfd), INFO);
     std::thread accept_t(accept_th, sock, std::ref(user_mut));
     accept_t.detach();
@@ -1517,7 +1526,7 @@ int main(int argc, char *argv[])
         user_mut.unlock();
         time_ticks++;
         const ms duration = clock::now() - before;
-        log(std::format("MSPT {}ms", duration.count()), INFO);
+        //log(std::format("MSPT {}ms", duration.count()), INFO);
         if (duration.count() <= 50)
             std::this_thread::sleep_for(std::chrono::milliseconds(50) - duration);
     }

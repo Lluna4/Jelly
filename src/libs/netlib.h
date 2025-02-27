@@ -1,7 +1,3 @@
-//
-// Created by carly on 24/08/2024.
-//
-
 #ifndef NETLIB_H
 #define NETLIB_H
 #include <string>
@@ -11,15 +7,18 @@
 #include <vector>
 #include <unistd.h>
 #include <arpa/inet.h>
-#include <sys/epoll.h>
+#include <sys/types.h>
+#include <sys/event.h>
+#include <sys/time.h>
 #include <netinet/tcp.h>
+#include <errno.h>
+#include <string.h>
 
 namespace netlib
 {
 	int init_server(const std::string &address, int port);
 	int connect_to_server(const std::string &address, int port);
-	void add_to_list(int fd, int epfd);
-	void remove_from_list(int fd, int epfd);
+	void add_to_list(int fd, int kq);
 	void disconnect_server(int fd, int epfd);
 }
 
