@@ -18,7 +18,8 @@ namespace netlib
 {
 	int init_server(const std::string &address, int port);
 	int connect_to_server(const std::string &address, int port);
-	void add_to_list(int fd, int kq);
+	void add_to_list(int fd, int epfd);
+	void remove_from_list(int fd, int epfd);
 	void disconnect_server(int fd, int epfd);
 }
 

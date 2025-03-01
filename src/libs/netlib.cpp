@@ -29,19 +29,38 @@ namespace netlib
 		return sockfd;
 	}
 
-	void add_to_list(int fd, int kq)
+	#ifdef __APPLE__
+	void add_to_list(int fd, int epfd)
 	{
 		struct kevent ev;
 		EV_SET(&ev, fd, EVFILT_READ, EV_ADD, 0, 0, 0);
-		kevent(kq, &ev, 1, NULL, 0, NULL);
+		kevent(epfd, &ev, 1, NULL, 0, NULL);
 	}
+	#endif
+	#ifdef __linux__
+	void add_to_list(int fd, int epfd)
+	{
+		epoll_event event;
+		event.data.fd = fd;
+		event.events = EPOLLIN;
+		epoll_ctl(epfd, EPOLL_CTL_ADD, fd, &event);
+	}
+	#endif
 
-	void remove_from_list(int fd, int kq)
+	#ifdef __APPLE__
+	void remove_from_list(int fd, int epfd)
 	{
 		struct kevent ev;
 		EV_SET(&ev, fd, EVFILT_READ, EV_DELETE, 0, 0, 0);
-		kevent(kq, &ev, 1, NULL, 0, NULL);
+		kevent(epfd, &ev, 1, NULL, 0, NULL);
 	}
+	#endif
+	#ifdef __linux__
+	void remove_from_list(int fd, int epfd)
+	{
+		epoll_ctl(epfd, EPOLL_CTL_DEL, fd, nullptr);
+	}
+	#endif
 
 	void disconnect_server(int fd, int epfd)
 	{
