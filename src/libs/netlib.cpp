@@ -29,22 +29,6 @@ namespace netlib
 		return sockfd;
 	}
 
-	int connect_to_server(const std::string &address, int port)
-	{
-		int sock = socket(AF_INET, SOCK_STREAM, 0);
-		sockaddr_in addr = {
-			AF_INET,
-			htons(port)
-		};
-		inet_pton(AF_INET, address.c_str(), &(addr.sin_addr));
-		if (connect(sock, reinterpret_cast<sockaddr *>(&addr), sizeof(addr)) == -1)
-		{
-			std::println("Connect failed!");
-			return -1;
-		}
-		return sock;
-	}
-
 	void add_to_list(int fd, int kq)
 	{
 		struct kevent ev;

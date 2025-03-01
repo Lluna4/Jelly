@@ -34,6 +34,8 @@ T read_type(char *v)
     std::memcpy(&a, v, sizeof(T));
     switch (sizeof(T))
     {
+        case 1:
+            break;
         case 2:
             a = be16toh(a);
             break;

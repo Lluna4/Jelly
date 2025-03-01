@@ -152,10 +152,16 @@ class User
         std::vector<packet> tick_packets;
         void to_file()
         {
-            int fd = open(std::format("{}.dat", name).c_str(), O_WRONLY | O_CREAT);
+            std::string file_name = std::format("{}.dat", name);
+            if (std::filesystem::exists(file_name))
+            {
+                std::filesystem::permissions(file_name, std::filesystem::perms::owner_all | std::filesystem::perms::group_all | std::filesystem::perms::others_all, std::filesystem::perm_options::add);
+            }
+            int fd = open(file_name.c_str(), O_WRONLY | O_CREAT);
+            std::filesystem::permissions(file_name, std::filesystem::perms::owner_all | std::filesystem::perms::group_all | std::filesystem::perms::others_all, std::filesystem::perm_options::add);
             if (fd == -1)
             {
-                std::print("Couldnt save user in file");
+                log(std::format("Could not open file to save Error: {}", strerror(errno)), INFO);
                 return;
             }
             auto user_data = std::make_tuple(selected_inv, state, render_distance, uuid, minecraft::string(name), 
@@ -190,6 +196,7 @@ class User
             angle.yaw = std::get<12>(data);
             on_ground = std::get<13>(data);
             sneaking = std::get<14>(data);
+            log(std::format("Position is {} {} {}", pos.x, pos.y, pos.z), INFO);
             //overwhelmed = std::get<15>(data);
             close(fd);
             free(buf);
@@ -857,7 +864,14 @@ void execute_packet(packet pkt, User &user)
         {
             user.state = PLAY;
             if (std::filesystem::exists(std::format("{}.dat", user.name)))
+            {
+                log(std::format("User {} has saved file", user.name), INFO);
                 user.from_file(std::format("{}.dat", user.name));
+            }
+            else
+            {
+                log(std::format("User {} doesnt have saved file", user.name));
+            }
             login_play login = 
             {
                 minecraft::varint(0x2B), user.sockfd, false, minecraft::varint(1), 

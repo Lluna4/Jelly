@@ -4,6 +4,7 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <vector>
+#include <sstream>
 #include <openssl/evp.h>
 #include <cstdint>
 #include <filesystem>
