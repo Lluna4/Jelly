@@ -4,14 +4,19 @@ namespace netlib
 	int init_server(const std::string &address, int port)
 	{
 		int sockfd = socket(AF_INET, SOCK_STREAM, 0);
-		sockaddr_in addr = {
-			AF_INET,
-			htons(port)
-		};
-		inet_pton(AF_INET, address.c_str(), &(addr.sin_addr));
+		sockaddr_in addr = {0};
+		addr.sin_family = AF_INET;
+		addr.sin_port = htons(port);
+		
+		if (inet_pton(AF_INET, address.c_str(), &(addr.sin_addr)) == -1)
+		{
+			std::println("Inet pton failed! {}", strerror(errno));
+			close(sockfd);
+			return -1;
+		}
 		if (bind(sockfd, reinterpret_cast<sockaddr *>(&addr), sizeof(addr)) == -1)
 		{
-			std::println("Bind failed!");
+			std::println("Bind failed! {}", strerror(errno));
 			close(sockfd);
 			return -1;
 		}
@@ -24,22 +29,15 @@ namespace netlib
 		return sockfd;
 	}
 
-	int connect_to_server(const std::string &address, int port)
+	#ifdef __APPLE__
+	void add_to_list(int fd, int epfd)
 	{
-		int sock = socket(AF_INET, SOCK_STREAM, 0);
-		sockaddr_in addr = {
-			AF_INET,
-			htons(port)
-		};
-		inet_pton(AF_INET, address.c_str(), &(addr.sin_addr));
-		if (connect(sock, reinterpret_cast<sockaddr *>(&addr), sizeof(addr)) == -1)
-		{
-			std::println("Connect failed!");
-			return -1;
-		}
-		return sock;
+		struct kevent ev;
+		EV_SET(&ev, fd, EVFILT_READ, EV_ADD, 0, 0, 0);
+		kevent(epfd, &ev, 1, NULL, 0, NULL);
 	}
-
+	#endif
+	#ifdef __linux__
 	void add_to_list(int fd, int epfd)
 	{
 		epoll_event event;
@@ -47,10 +45,22 @@ namespace netlib
 		event.events = EPOLLIN;
 		epoll_ctl(epfd, EPOLL_CTL_ADD, fd, &event);
 	}
+	#endif
+
+	#ifdef __APPLE__
+	void remove_from_list(int fd, int epfd)
+	{
+		struct kevent ev;
+		EV_SET(&ev, fd, EVFILT_READ, EV_DELETE, 0, 0, 0);
+		kevent(epfd, &ev, 1, NULL, 0, NULL);
+	}
+	#endif
+	#ifdef __linux__
 	void remove_from_list(int fd, int epfd)
 	{
 		epoll_ctl(epfd, EPOLL_CTL_DEL, fd, nullptr);
 	}
+	#endif
 
 	void disconnect_server(int fd, int epfd)
 	{

@@ -1,7 +1,3 @@
-//
-// Created by carly on 24/08/2024.
-//
-
 #ifndef NETLIB_H
 #define NETLIB_H
 #include <string>
@@ -11,8 +7,17 @@
 #include <vector>
 #include <unistd.h>
 #include <arpa/inet.h>
+#include <sys/types.h>
+#ifdef __APPLE__
+#include <sys/event.h>
+#endif
+#ifdef __linux__
 #include <sys/epoll.h>
+#endif
+#include <sys/time.h>
 #include <netinet/tcp.h>
+#include <errno.h>
+#include <string.h>
 
 namespace netlib
 {

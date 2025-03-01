@@ -6,7 +6,15 @@
 #include <cstring>
 #include <memory>
 #include <mutex>
+#include <sys/types.h>
+#ifdef __APPLE__
+#include <sys/event.h>
+#endif
+#ifdef __linux__
 #include <sys/epoll.h>
+#include <sys/sendfile.h>
+#endif
+#include <sys/time.h>
 #include <sys/socket.h>
 #include <tuple>
 #include <vector>
@@ -15,7 +23,7 @@
 #include <chrono>
 #include <errno.h>
 #include <nlohmann/json.hpp>
-#include <sys/sendfile.h>
+#include <sys/uio.h>
 #include <math.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -150,10 +158,16 @@ class User
         std::vector<packet> tick_packets;
         void to_file()
         {
-            int fd = open(std::format("{}.dat", name).c_str(), O_WRONLY | O_CREAT);
+            std::string file_name = std::format("{}.dat", name);
+            if (std::filesystem::exists(file_name))
+            {
+                std::filesystem::permissions(file_name, std::filesystem::perms::owner_all | std::filesystem::perms::group_all | std::filesystem::perms::others_all, std::filesystem::perm_options::add);
+            }
+            int fd = open(file_name.c_str(), O_WRONLY | O_CREAT);
+            std::filesystem::permissions(file_name, std::filesystem::perms::owner_all | std::filesystem::perms::group_all | std::filesystem::perms::others_all, std::filesystem::perm_options::add);
             if (fd == -1)
             {
-                std::print("Couldnt save user in file");
+                log(std::format("Could not open file to save Error: {}", strerror(errno)), INFO);
                 return;
             }
             auto user_data = std::make_tuple(selected_inv, state, render_distance, uuid, minecraft::string(name), 
@@ -188,6 +202,7 @@ class User
             angle.yaw = std::get<12>(data);
             on_ground = std::get<13>(data);
             sneaking = std::get<14>(data);
+            log(std::format("Position is {} {} {}", pos.x, pos.y, pos.z), INFO);
             //overwhelmed = std::get<15>(data);
             close(fd);
             free(buf);
@@ -231,9 +246,11 @@ void accept_th(int sock, std::mutex &mut)
     sockaddr_in addr = {0};
     unsigned int addr_size = sizeof(addr);
     char str[INET_ADDRSTRLEN];
+    log("Listening for clients", INFO);
     while (true)
     {
         int new_client = accept(sock, (sockaddr *)&addr, &addr_size);
+        log("Client accepted", INFO);
         netlib::add_to_list(new_client, epfd);
         struct in_addr ipAddr = addr.sin_addr;
         std::println("{} connected", inet_ntop(AF_INET, &ipAddr, str, INET_ADDRSTRLEN));
@@ -375,6 +392,65 @@ void status_response(User user)
     send_check(status_pkt, user.sockfd);
 }
 
+#ifdef __APPLE__
+void registry_data(User user)
+{
+    int fd = open("../Minecraft-DataRegistry-Packet-Generator/registries/1.21-registry/created-packets/banner_pattern.data", O_RDONLY);
+    off_t file_size = lseek(fd, 0, SEEK_END);
+    lseek(fd, 0, SEEK_SET);
+    sendfile(fd, user.sockfd, 0, &file_size, NULL, 0);
+    close(fd);
+    
+    fd = open("../Minecraft-DataRegistry-Packet-Generator/registries/1.21-registry/created-packets/chat_type.data", O_RDONLY);
+    file_size = lseek(fd, 0, SEEK_END);
+    lseek(fd, 0, SEEK_SET);
+    sendfile(fd, user.sockfd, 0, &file_size, NULL, 0);
+    close(fd);
+    
+    fd = open("../Minecraft-DataRegistry-Packet-Generator/registries/1.21-registry/created-packets/damage_type.data", O_RDONLY);
+    file_size = lseek(fd, 0, SEEK_END);
+    lseek(fd, 0, SEEK_SET);
+    sendfile(fd, user.sockfd, 0, &file_size, NULL, 0);
+    close(fd);
+    
+    fd = open("../Minecraft-DataRegistry-Packet-Generator/registries/1.21-registry/created-packets/dimension_type.data", O_RDONLY);
+    file_size = lseek(fd, 0, SEEK_END);
+    lseek(fd, 0, SEEK_SET);
+    sendfile(fd, user.sockfd, 0, &file_size, NULL, 0);
+    close(fd);
+
+    fd = open("../Minecraft-DataRegistry-Packet-Generator/registries/1.21-registry/created-packets/painting_variant.data", O_RDONLY);
+    file_size = lseek(fd, 0, SEEK_END);
+    lseek(fd, 0, SEEK_SET);
+    sendfile(fd, user.sockfd, 0, &file_size, NULL, 0);
+    close(fd);
+
+    fd = open("../Minecraft-DataRegistry-Packet-Generator/registries/1.21-registry/created-packets/trim_material.data", O_RDONLY);
+    file_size = lseek(fd, 0, SEEK_END);
+    lseek(fd, 0, SEEK_SET);
+    sendfile(fd, user.sockfd, 0, &file_size, NULL, 0);
+    close(fd);
+
+    fd = open("../Minecraft-DataRegistry-Packet-Generator/registries/1.21-registry/created-packets/trim_pattern.data", O_RDONLY);
+    file_size = lseek(fd, 0, SEEK_END);
+    lseek(fd, 0, SEEK_SET);
+    sendfile(fd, user.sockfd, 0, &file_size, NULL, 0);
+    close(fd);
+
+    fd = open("../Minecraft-DataRegistry-Packet-Generator/registries/1.21-registry/created-packets/wolf_variant.data", O_RDONLY);
+    file_size = lseek(fd, 0, SEEK_END);
+    lseek(fd, 0, SEEK_SET);
+    sendfile(fd, user.sockfd, 0, &file_size, NULL, 0);
+    close(fd);
+
+    fd = open("../Minecraft-DataRegistry-Packet-Generator/registries/1.21-registry/created-packets/worldgen/biome.data", O_RDONLY);
+    file_size = lseek(fd, 0, SEEK_END);
+    lseek(fd, 0, SEEK_SET);
+    sendfile(fd, user.sockfd, 0, &file_size, NULL, 0);
+    close(fd);
+}
+#endif
+#ifdef __linux__
 void registry_data(User user)
 {
     int fd = open("../Minecraft-DataRegistry-Packet-Generator/registries/1.21-registry/created-packets/banner_pattern.data", O_RDONLY);
@@ -431,6 +507,7 @@ void registry_data(User user)
     sendfile(user.sockfd, fd, 0, file_size);
     close(fd);
 }
+#endif
 
 template<typename ...T>
 void send_everyone(std::tuple<T...> packet)
@@ -745,7 +822,7 @@ void update_keep_alive()
                 send_check(keep_alive, user.second.sockfd);
                 user.second.ticks_to_keep_alive--;
             }
-            else if (user.second.ticks_to_keep_alive < 0)
+            else if (user.second.ticks_to_keep_alive < 0 && user.second.loading == false)
             {
                 if (user.second.ticks_since_keep_alive > 600)
                 {
@@ -853,7 +930,14 @@ void execute_packet(packet pkt, User &user)
         {
             user.state = PLAY;
             if (std::filesystem::exists(std::format("{}.dat", user.name)))
+            {
+                log(std::format("User {} has saved file", user.name), INFO);
                 user.from_file(std::format("{}.dat", user.name));
+            }
+            else
+            {
+                log(std::format("User {} doesnt have saved file", user.name));
+            }
             login_play login = 
             {
                 minecraft::varint(0x2B), user.sockfd, false, minecraft::varint(1), 
@@ -1310,6 +1394,35 @@ void execute_packet(packet pkt, User &user)
     }
 }
 
+#ifdef __APPLE__
+void chunk_send_th(int pipefd, std::mutex &mut)
+{
+    int kq;
+    if ((kq = kqueue()) == -1) 
+    {
+       perror("kqueue");
+       exit(EXIT_FAILURE);
+    }
+    netlib::add_to_list(pipefd, kq);
+    
+    int events_ready = 0;
+    struct kevent events[1024];
+    
+    while (true)
+    {
+        events_ready = kevent(kq, NULL, 0, events, 1024, NULL);
+        if (events_ready == -1)
+            log(std::format("Error! {}", strerror(errno)), INFO);
+        //log("got signal to send chunks", INFO);
+        std::lock_guard<std::mutex> lock(mut);
+        for (auto user: users)
+        {
+            update_visible_chunks(user.second);
+        }
+    }
+}
+#endif
+#ifdef __linux__
 void chunk_send_th(int pipefd, std::mutex &mut)
 {
     int internal_epoll = epoll_create1(0);
@@ -1331,7 +1444,98 @@ void chunk_send_th(int pipefd, std::mutex &mut)
         }
     }
 }
+#endif
 
+#ifdef __APPLE__
+void recv_thread(std::mutex &mut)
+{
+    int events_ready = 0;
+    struct kevent events[1024];
+    char *buffer = (char *)calloc(4096, sizeof(char));
+    int status = 0;
+    int alloc_max = 4096;
+    while (true)
+    {
+        events_ready = kevent(epfd, NULL, 0, events, 1024, NULL);
+        if (events_ready == -1)
+            log(std::format("Epoll error! {}", strerror(errno)), ERROR);
+        for (int i = 0; i < events_ready; i++)
+        {
+            int current_fd = events[i].ident;
+            status = recv(current_fd, buffer, 10, MSG_PEEK);
+            if (status == -1 || status == 0)
+            {
+                disconnect_user(current_fd);
+                continue;
+            }
+            std::tuple<minecraft::varint, minecraft::varint> header;
+            packet pkt_internal = {.id = 0, .size = 4096, .buf_size = 4096, .data = buffer, .start_data = buffer, .sock = 0};
+            header = read_packet(header, pkt_internal);
+            bool user_disconnect = false;
+            if (std::get<0>(header).num + std::get<0>(header).size <= 10)
+            {
+                int data_left = std::get<0>(header).num + std::get<0>(header).size;
+                status = recv(current_fd, buffer, data_left, 0);
+                if (status == -1 || status == 0)
+                {
+                    disconnect_user(current_fd);
+                    continue;
+                }
+            }
+            else if (std::get<0>(header).num + std::get<0>(header).size <= alloc_max)
+            {
+                int data_recv = 0;
+                while (data_recv < std::get<0>(header).num + std::get<0>(header).size)
+                {
+                    int data_left = (std::get<0>(header).num + std::get<0>(header).size) - data_recv; 
+                    status = recv(current_fd, &buffer[data_recv], data_left, 0);
+                    if (status == -1 || status == 0)
+                    {
+                        disconnect_user(current_fd);
+                        user_disconnect = true;
+                        break;
+                    }
+                    data_recv += status;
+                }
+            }
+            else 
+            {
+                buffer = (char *)realloc(buffer, std::get<0>(header).num + std::get<0>(header).size * sizeof(char));
+                alloc_max = std::get<0>(header).num + std::get<0>(header).size * sizeof(char);
+                log(std::format("Reallocated buffer to {}B", alloc_max), INFO);
+                int data_recv = 0;
+                while (data_recv < std::get<0>(header).num + std::get<0>(header).size)
+                {
+                    int data_left = (std::get<0>(header).num + std::get<0>(header).size) - data_recv; 
+                    status = recv(current_fd, &buffer[data_recv], data_left, 0);
+                    if (status == -1 || status == 0)
+                    {
+                        disconnect_user(current_fd);
+                        user_disconnect = true;
+                        break;
+                    }
+                    data_recv += status;
+                }
+            }
+            if (user_disconnect == true)
+                continue;
+            packet pkt;
+            int header_size = std::get<0>(header).size + std::get<1>(header).size;
+            int data_size = status - header_size;
+            pkt.id = std::get<1>(header).num;
+            pkt.size = std::get<0>(header).num;
+            pkt.data = mem_dup(buffer + header_size, data_size);
+            pkt.start_data = pkt.data;
+            pkt.buf_size = data_size;
+            pkt.sock = current_fd;
+            std::lock_guard<std::mutex> lock(mut);
+            users.find(current_fd)->second.tick_packets.push_back(pkt);
+            memset(buffer, 0, alloc_max);
+        }
+    }
+}
+#endif
+#ifdef __linux__
 void recv_thread(std::mutex &mut)
 {
     int events_ready = 0;
@@ -1419,6 +1623,7 @@ void recv_thread(std::mutex &mut)
         }
     }
 }
+#endif
 
 int main(int argc, char *argv[])
 {
@@ -1458,7 +1663,12 @@ int main(int argc, char *argv[])
     return -1;
     }
     std::thread world_th(chunk_send_th, pipefds[0], std::ref(user_mut));
+    #ifdef __APPLE__
+    epfd = kqueue();
+    #endif
+    #ifdef __linux__
     epfd = epoll_create1(0);
+    #endif
     log(std::format("epfd is {}", epfd), INFO);
     std::thread accept_t(accept_th, sock, std::ref(user_mut));
     accept_t.detach();
@@ -1517,7 +1727,7 @@ int main(int argc, char *argv[])
         user_mut.unlock();
         time_ticks++;
         const ms duration = clock::now() - before;
-        log(std::format("MSPT {}ms", duration.count()), INFO);
+        //log(std::format("MSPT {}ms", duration.count()), INFO);
         if (duration.count() <= 50)
             std::this_thread::sleep_for(std::chrono::milliseconds(50) - duration);
     }
