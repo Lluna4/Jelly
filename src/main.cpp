@@ -7,7 +7,13 @@
 #include <memory>
 #include <mutex>
 #include <sys/types.h>
+#ifdef __APPLE__
 #include <sys/event.h>
+#endif
+#ifdef __linux__
+#include <sys/epoll.h>
+#include <sys/sendfile.h>
+#endif
 #include <sys/time.h>
 #include <sys/socket.h>
 #include <tuple>
@@ -386,6 +392,7 @@ void status_response(User user)
     send_check(status_pkt, user.sockfd);
 }
 
+#ifdef __APPLE__
 void registry_data(User user)
 {
     int fd = open("../Minecraft-DataRegistry-Packet-Generator/registries/1.21-registry/created-packets/banner_pattern.data", O_RDONLY);
@@ -442,6 +449,65 @@ void registry_data(User user)
     sendfile(fd, user.sockfd, 0, &file_size, NULL, 0);
     close(fd);
 }
+#endif
+#ifdef __linux__
+void registry_data(User user)
+{
+    int fd = open("../Minecraft-DataRegistry-Packet-Generator/registries/1.21-registry/created-packets/banner_pattern.data", O_RDONLY);
+    off_t file_size = lseek(fd, 0, SEEK_END);
+    lseek(fd, 0, SEEK_SET);
+    sendfile(user.sockfd, fd, 0, file_size);
+    close(fd);
+    
+    fd = open("../Minecraft-DataRegistry-Packet-Generator/registries/1.21-registry/created-packets/chat_type.data", O_RDONLY);
+    file_size = lseek(fd, 0, SEEK_END);
+    lseek(fd, 0, SEEK_SET);
+    sendfile(user.sockfd, fd, 0, file_size);
+    close(fd);
+    
+    fd = open("../Minecraft-DataRegistry-Packet-Generator/registries/1.21-registry/created-packets/damage_type.data", O_RDONLY);
+    file_size = lseek(fd, 0, SEEK_END);
+    lseek(fd, 0, SEEK_SET);
+    sendfile(user.sockfd, fd, 0, file_size);
+    close(fd);
+    
+    fd = open("../Minecraft-DataRegistry-Packet-Generator/registries/1.21-registry/created-packets/dimension_type.data", O_RDONLY);
+    file_size = lseek(fd, 0, SEEK_END);
+    lseek(fd, 0, SEEK_SET);
+    sendfile(user.sockfd, fd, 0, file_size);
+    close(fd);
+
+    fd = open("../Minecraft-DataRegistry-Packet-Generator/registries/1.21-registry/created-packets/painting_variant.data", O_RDONLY);
+    file_size = lseek(fd, 0, SEEK_END);
+    lseek(fd, 0, SEEK_SET);
+    sendfile(user.sockfd, fd, 0, file_size);
+    close(fd);
+
+    fd = open("../Minecraft-DataRegistry-Packet-Generator/registries/1.21-registry/created-packets/trim_material.data", O_RDONLY);
+    file_size = lseek(fd, 0, SEEK_END);
+    lseek(fd, 0, SEEK_SET);
+    sendfile(user.sockfd, fd, 0, file_size);
+    close(fd);
+
+    fd = open("../Minecraft-DataRegistry-Packet-Generator/registries/1.21-registry/created-packets/trim_pattern.data", O_RDONLY);
+    file_size = lseek(fd, 0, SEEK_END);
+    lseek(fd, 0, SEEK_SET);
+    sendfile(user.sockfd, fd, 0, file_size);
+    close(fd);
+
+    fd = open("../Minecraft-DataRegistry-Packet-Generator/registries/1.21-registry/created-packets/wolf_variant.data", O_RDONLY);
+    file_size = lseek(fd, 0, SEEK_END);
+    lseek(fd, 0, SEEK_SET);
+    sendfile(user.sockfd, fd, 0, file_size);
+    close(fd);
+
+    fd = open("../Minecraft-DataRegistry-Packet-Generator/registries/1.21-registry/created-packets/worldgen/biome.data", O_RDONLY);
+    file_size = lseek(fd, 0, SEEK_END);
+    lseek(fd, 0, SEEK_SET);
+    sendfile(user.sockfd, fd, 0, file_size);
+    close(fd);
+}
+#endif
 
 template<typename ...T>
 void send_everyone(std::tuple<T...> packet)

@@ -8,7 +8,12 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <sys/types.h>
+#ifdef __APPLE__
 #include <sys/event.h>
+#endif
+#ifdef __linux__
+#include <sys/epoll.h>
+#endif
 #include <sys/time.h>
 #include <netinet/tcp.h>
 #include <errno.h>
