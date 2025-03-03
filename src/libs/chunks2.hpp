@@ -28,6 +28,93 @@ struct dot
 	}
 };
 
+struct structure
+{
+	structure()
+	{
+		y_max = 15;
+		x_max = 11;
+		z_max = 11;
+		blocks.resize(15);
+		for (auto &block: blocks)
+		{
+			block.resize(11);
+			for (auto &b: block)
+			{
+				b.resize(11);
+			}
+		}
+		int x_ = 5;
+		int z_ = 5;
+		int height_ = 0;
+		blocks[height_][z_][x_] = 146;
+		blocks[height_ + 1][z_][x_] = 146;
+		blocks[height_ + 2][z_][x_] = 146;
+		blocks[height_ + 3][z_][x_] = 146;
+		blocks[height_ + 3][ z_][x_ + 1] = 146;
+		blocks[height_ + 3][ z_][x_ + 2] = 146;
+		blocks[height_ + 4][ z_][x_ + 2] = 146;
+		blocks[height_ + 5][ z_][x_ + 2] = 146;
+		int diff = 4;
+		int diff2 = 0;
+		for (int i = height_ + 5; i < height_ + 10;i++)
+		{
+			if (i == height_ + 7)
+			{
+				diff++;
+				diff2--;
+			}
+			if (i == height_ + 8)
+			{
+				diff--;
+				diff2++;
+			}
+			if (i == height_ + 9)
+			{
+				diff--;
+				diff2++;
+			}
+			for (int ii = (z_ - 2) + diff2; ii < z_ + diff; ii++)
+			{
+				for (int iii = x_ + diff2; iii < x_ + (diff + 2); iii++)
+				{
+					int r = 50;
+					if (r < 80)
+						blocks[i][ii][iii] = 404;
+				}
+			}
+		}
+	}
+	structure(int x_m, int y_m, int z_m)
+	:x_max(x_m), y_max(y_m), z_max(z_m)
+	{
+		blocks.resize(y_m);
+		for (auto &block: blocks)
+		{
+			block.resize(z_m);
+			for (auto &b: block)
+			{
+				b.resize(x_m);
+			}
+		}
+	}
+	structure(std::vector<std::vector<std::vector<int>>> structure,int x_m, int y_m, int z_m)
+	:blocks(structure), x_max(x_m), y_max(y_m), z_max(z_m)
+	{
+		blocks.resize(y_m);
+		for (auto &block: blocks)
+		{
+			block.resize(z_m);
+			for (auto &b: block)
+			{
+				b.resize(x_m);
+			}
+		}
+	}
+	std::vector<std::vector<std::vector<int>>> blocks;
+	int x_max, y_max, z_max;
+};
+
 struct position_int
 {
 	int x, y, z;
@@ -224,6 +311,7 @@ struct chunk
 struct world
 {
 	std::unordered_map<std::pair<int, int>, chunk> chunks;
+	structure Structure;
 
 	void place_translated_block(position_int block_p, chunk &chunk, minecraft::varint block_id)
 	{
@@ -294,45 +382,18 @@ struct world
 						}
 						if (random2 > 995 && y >= 64 && trees == true)
 						{
-							//chunk.trees.emplace_back(worldX, height_, worldZ);
-							//log(std::format("Tree generated at {} {} {} in chunk {} {} with height {}", (x_ +(x * 16)), height_, (z_ + (z * 16)), x, z, height_), INFO);
-							chunk.place_block(x_, height_, z_, 146);
-							chunk.place_block(x_, height_ + 1, z_, 146);
-							chunk.place_block(x_, height_ + 2, z_, 146);
-							chunk.place_block(x_, height_ + 3, z_, 146);	
-							place_translated_block({x_ + 1, height_ + 3, z_}, chunk, 146);
-							place_translated_block({x_ + 2, height_ + 3, z_}, chunk, 146);
-							place_translated_block({x_ + 2, height_ + 4, z_}, chunk, 146);
-							place_translated_block({x_ + 2, height_ + 5, z_}, chunk, 146);
-							int diff = 4;
-							int diff2 = 0;
-							for (int i = y + 5; i < y + 10;i++)
+							for (int yy = 0; yy < Structure.y_max; yy++)
 							{
-								if (i == y + 7)
+								for (int zz = 0; zz < Structure.z_max; zz++)
 								{
-									diff++;
-									diff2--;
-								}
-								if (i == y + 8)
-								{
-									diff--;
-									diff2++;
-								}
-								if (i == y + 9)
-								{
-									diff--;
-									diff2++;
-								}
-								for (int ii = (z_ - 2) + diff2; ii < z_ + diff; ii++)
-								{
-									for (int iii = x_ + diff2; iii < x_ + (diff + 2); iii++)
+									for (int xx = 0; xx < Structure.x_max; xx++)
 									{
-										int r = random()%100;
-										if (r < 90)
-											place_translated_block({iii, i, ii}, chunk, 404);
+										if (Structure.blocks[yy][zz][xx] == 0)
+											continue;
+										place_translated_block({x_ + (xx - Structure.x_max/2), height_ + yy, z_ + (zz - Structure.z_max/2)}, chunk, minecraft::varint(Structure.blocks[yy][zz][xx]));
 									}
 								}
-							}	
+							}
 						}
 					}
 					else

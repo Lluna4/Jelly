@@ -310,9 +310,104 @@ void disconnect_user(int current_fd)
     }
 }
 
+void disconnect_user(int current_fd, std::mutex &mut)
+{
+    netlib::disconnect_server(current_fd, epfd);
+    std::lock_guard<std::mutex> lock(mut);
+    auto current_user = users.find(current_fd)->second;
+    if (current_user.state == PLAY)
+    {
+        std::tuple<minecraft::varint, minecraft::string_tag, bool> system_chat = 
+        {
+            minecraft::varint(0x6C), minecraft::string_tag(std::format("{} disconnected", current_user.name)), false
+        };
+        for (auto us: users)
+        {
+            if (us.second.state == PLAY && us.second.loading == false)
+            {
+                send_packet(system_chat, us.second.sockfd);
+            }
+        }
+        current_user.to_file();
+        connected_users--;
+    }
+    minecraft::uuid uuid = current_user.uuid;
+    users.erase(current_user.sockfd);
+    
+    std::tuple<minecraft::varint, minecraft::varint, minecraft::varint> remove_entity = 
+    {
+        minecraft::varint(0x42), minecraft::varint(1), minecraft::varint(current_user.sockfd)
+    };
+    std::tuple<minecraft::varint, minecraft::varint, minecraft::uuid> remove_info = 
+    {
+        minecraft::varint(0x3D), minecraft::varint(1), uuid
+    };
+    for (auto us: users)
+    {
+        if (us.second.state == PLAY && us.second.loading == false)
+        {
+            send_packet(remove_entity, us.second.sockfd);
+        }
+    }
+    for (auto us: users)
+    {
+        if (us.second.state == PLAY && us.second.loading == false)
+        {
+            send_packet(remove_info, us.second.sockfd);
+        }
+    }
+}
+
 void disconnect_user(User current_user)
 {
     netlib::disconnect_server(current_user.sockfd, epfd);
+    if (current_user.state == PLAY)
+    {
+        std::tuple<minecraft::varint, minecraft::string_tag, bool> system_chat = 
+        {
+            minecraft::varint(0x6C), minecraft::string_tag(std::format("{} disconnected", current_user.name)), false
+        };
+        for (auto us: users)
+        {
+            if (us.second.state == PLAY && us.second.loading == false)
+            {
+                send_packet(system_chat, us.second.sockfd);
+            }
+        }
+        current_user.to_file();
+        connected_users--;
+    }
+    minecraft::uuid uuid = current_user.uuid;
+    users.erase(current_user.sockfd);
+    
+    std::tuple<minecraft::varint, minecraft::varint, minecraft::varint> remove_entity = 
+    {
+        minecraft::varint(0x42), minecraft::varint(1), minecraft::varint(current_user.sockfd)
+    };
+    std::tuple<minecraft::varint, minecraft::varint, minecraft::uuid> remove_info = 
+    {
+        minecraft::varint(0x3D), minecraft::varint(1), uuid
+    };
+    for (auto us: users)
+    {
+        if (us.second.state == PLAY && us.second.loading == false)
+        {
+            send_packet(remove_entity, us.second.sockfd);
+        }
+    }
+    for (auto us: users)
+    {
+        if (us.second.state == PLAY && us.second.loading == false)
+        {
+            send_packet(remove_info, us.second.sockfd);
+        }
+    }
+}
+
+void disconnect_user(User current_user, std::mutex &mut)
+{
+    netlib::disconnect_server(current_user.sockfd, epfd);
+    std::lock_guard<std::mutex> lock(mut);
     if (current_user.state == PLAY)
     {
         std::tuple<minecraft::varint, minecraft::string_tag, bool> system_chat = 
@@ -1465,7 +1560,7 @@ void recv_thread(std::mutex &mut)
             status = recv(current_fd, buffer, 10, MSG_PEEK);
             if (status == -1 || status == 0)
             {
-                disconnect_user(current_fd);
+                disconnect_user(current_fd, mut);
                 continue;
             }
             std::tuple<minecraft::varint, minecraft::varint> header;
@@ -1478,7 +1573,7 @@ void recv_thread(std::mutex &mut)
                 status = recv(current_fd, buffer, data_left, 0);
                 if (status == -1 || status == 0)
                 {
-                    disconnect_user(current_fd);
+                    disconnect_user(current_fd, mut);
                     continue;
                 }
             }
@@ -1491,7 +1586,7 @@ void recv_thread(std::mutex &mut)
                     status = recv(current_fd, &buffer[data_recv], data_left, 0);
                     if (status == -1 || status == 0)
                     {
-                        disconnect_user(current_fd);
+                        disconnect_user(current_fd, mut);
                         user_disconnect = true;
                         break;
                     }
@@ -1510,7 +1605,7 @@ void recv_thread(std::mutex &mut)
                     status = recv(current_fd, &buffer[data_recv], data_left, 0);
                     if (status == -1 || status == 0)
                     {
-                        disconnect_user(current_fd);
+                        disconnect_user(current_fd, mut);
                         user_disconnect = true;
                         break;
                     }
@@ -1554,7 +1649,7 @@ void recv_thread(std::mutex &mut)
             status = recv(current_fd, buffer, 10, MSG_PEEK);
             if (status == -1 || status == 0)
             {
-                disconnect_user(current_fd);
+                disconnect_user(current_fd, mut);
                 continue;
             }
             std::tuple<minecraft::varint, minecraft::varint> header;
@@ -1567,7 +1662,7 @@ void recv_thread(std::mutex &mut)
                 status = recv(current_fd, buffer, data_left, 0);
                 if (status == -1 || status == 0)
                 {
-                    disconnect_user(current_fd);
+                    disconnect_user(current_fd, mut);
                     continue;
                 }
             }
@@ -1580,7 +1675,7 @@ void recv_thread(std::mutex &mut)
                     status = recv(current_fd, &buffer[data_recv], data_left, 0);
                     if (status == -1 || status == 0)
                     {
-                        disconnect_user(current_fd);
+                        disconnect_user(current_fd, mut);
                         user_disconnect = true;
                         break;
                     }
@@ -1599,7 +1694,7 @@ void recv_thread(std::mutex &mut)
                     status = recv(current_fd, &buffer[data_recv], data_left, 0);
                     if (status == -1 || status == 0)
                     {
-                        disconnect_user(current_fd);
+                        disconnect_user(current_fd, mut);
                         user_disconnect = true;
                         break;
                     }
@@ -1659,10 +1754,9 @@ int main(int argc, char *argv[])
     }
     if (pipe(pipefds) == -1)
     {
-    log(std::format("Error creating pipes {}", strerror(errno)), ERROR);
-    return -1;
+        log(std::format("Error creating pipes {}", strerror(errno)), ERROR);
+        return -1;
     }
-    std::thread world_th(chunk_send_th, pipefds[0], std::ref(user_mut));
     #ifdef __APPLE__
     epfd = kqueue();
     #endif
@@ -1674,12 +1768,12 @@ int main(int argc, char *argv[])
     accept_t.detach();
     std::thread read_t(recv_thread, std::ref(user_mut));
     read_t.detach();
-    
+    std::thread world_th(chunk_send_th, pipefds[0], std::ref(user_mut));
     for (int z = -12; z < 12; z++)
     {
         for (int x = -12; x < 12; x++)
         {
-            World.generate_chunk(x, z);
+            World.generate_chunk(x, z, true);
         }
     }
     log("world created", INFO);
