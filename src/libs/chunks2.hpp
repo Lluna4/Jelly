@@ -28,33 +28,68 @@ struct dot
 	}
 };
 
+struct position_int
+{
+	position_int(int x_, int y_, int z_)
+	:x(x_), y(y_), z(z_)
+	{}
+	int x, y, z;
+
+    bool operator<(const position_int& other) const 
+	{
+        if (x != other.x) return x < other.x;
+        if (y != other.y) return y < other.y;
+        return z < other.z;
+    }
+};
+
 struct structure
 {
 	structure()
 	{
-		y_max = 15;
-		x_max = 11;
-		z_max = 11;
-		blocks.resize(15);
-		for (auto &block: blocks)
-		{
-			block.resize(11);
-			for (auto &b: block)
-			{
-				b.resize(11);
-			}
-		}
-		int x_ = 5;
-		int z_ = 5;
+		int x_ = 0;
+		int z_ = 0;
 		int height_ = 0;
-		blocks[height_][z_][x_] = 146;
-		blocks[height_ + 1][z_][x_] = 146;
-		blocks[height_ + 2][z_][x_] = 146;
-		blocks[height_ + 3][z_][x_] = 146;
-		blocks[height_ + 3][ z_][x_ + 1] = 146;
-		blocks[height_ + 3][ z_][x_ + 2] = 146;
-		blocks[height_ + 4][ z_][x_ + 2] = 146;
-		blocks[height_ + 5][ z_][x_ + 2] = 146;
+		blocks.emplace(
+			std::piecewise_construct,
+			std::forward_as_tuple(x_, height_, z_),
+			std::forward_as_tuple(146)
+		);
+		blocks.emplace(
+			std::piecewise_construct,
+			std::forward_as_tuple(x_, height_ + 1, z_),
+			std::forward_as_tuple(146)
+		);
+		blocks.emplace(
+			std::piecewise_construct,
+			std::forward_as_tuple(x_, height_ + 2, z_),
+			std::forward_as_tuple(146)
+		);
+		blocks.emplace(
+			std::piecewise_construct,
+			std::forward_as_tuple(x_, height_ + 3, z_),
+			std::forward_as_tuple(146)
+		);
+		blocks.emplace(
+			std::piecewise_construct,
+			std::forward_as_tuple(x_ + 1, height_ + 3, z_),
+			std::forward_as_tuple(146)
+		);
+		blocks.emplace(
+			std::piecewise_construct,
+			std::forward_as_tuple(x_ + 2, height_ + 3, z_),
+			std::forward_as_tuple(146)
+		);
+		blocks.emplace(
+			std::piecewise_construct,
+			std::forward_as_tuple(x_ + 2, height_ + 4, z_),
+			std::forward_as_tuple(146)
+		);
+		blocks.emplace(
+			std::piecewise_construct,
+			std::forward_as_tuple(x_+ 2, height_ + 5, z_),
+			std::forward_as_tuple(146)
+		);
 		int diff = 4;
 		int diff2 = 0;
 		for (int i = height_ + 5; i < height_ + 10;i++)
@@ -80,44 +115,21 @@ struct structure
 				{
 					int r = 50;
 					if (r < 80)
-						blocks[i][ii][iii] = 404;
+					blocks.emplace(
+						std::piecewise_construct,
+						std::forward_as_tuple(iii, i, ii),
+						std::forward_as_tuple(404)
+					);
 				}
 			}
 		}
 	}
-	structure(int x_m, int y_m, int z_m)
-	:x_max(x_m), y_max(y_m), z_max(z_m)
-	{
-		blocks.resize(y_m);
-		for (auto &block: blocks)
-		{
-			block.resize(z_m);
-			for (auto &b: block)
-			{
-				b.resize(x_m);
-			}
-		}
-	}
-	structure(std::vector<std::vector<std::vector<int>>> structure,int x_m, int y_m, int z_m)
-	:blocks(structure), x_max(x_m), y_max(y_m), z_max(z_m)
-	{
-		blocks.resize(y_m);
-		for (auto &block: blocks)
-		{
-			block.resize(z_m);
-			for (auto &b: block)
-			{
-				b.resize(x_m);
-			}
-		}
-	}
-	std::vector<std::vector<std::vector<int>>> blocks;
-	int x_max, y_max, z_max;
-};
 
-struct position_int
-{
-	int x, y, z;
+	structure(std::map<position_int, int> structure)
+	:blocks(structure)
+	{}
+
+	std::map<position_int, int> blocks;
 };
 
 struct block_pos
@@ -290,14 +302,12 @@ struct chunk
 		position_int ret = block_pos;
 		position_int chunk_ret = {x, 0, z}; 
 
-		// Handle X coordinate
 		if (block_pos.x >= 16 || block_pos.x < 0) {
 			int chunk_offset = (block_pos.x >= 0) ? block_pos.x / 16 : (block_pos.x - 15) / 16;
 			ret.x = rem_euclid(block_pos.x, 16);
 			chunk_ret.x += chunk_offset;
 		}
 
-		// Handle Z coordinate 
 		if (block_pos.z >= 16 || block_pos.z < 0) {
 			int chunk_offset = (block_pos.z >= 0) ? block_pos.z / 16 : (block_pos.z - 15) / 16;
 			ret.z = rem_euclid(block_pos.z, 16);
@@ -382,17 +392,9 @@ struct world
 						}
 						if (random2 > 995 && y >= 64 && trees == true)
 						{
-							for (int yy = 0; yy < Structure.y_max; yy++)
+							for (auto block: Structure.blocks)
 							{
-								for (int zz = 0; zz < Structure.z_max; zz++)
-								{
-									for (int xx = 0; xx < Structure.x_max; xx++)
-									{
-										if (Structure.blocks[yy][zz][xx] == 0)
-											continue;
-										place_translated_block({x_ + (xx - Structure.x_max/2), height_ + yy, z_ + (zz - Structure.z_max/2)}, chunk, minecraft::varint(Structure.blocks[yy][zz][xx]));
-									}
-								}
+								place_translated_block({x_ + block.first.x, height_ + block.first.y, z_ + block.first.z}, chunk, block.second);
 							}
 						}
 					}
@@ -426,49 +428,5 @@ struct world
 	{
 	    auto &chunk = generate_chunk(floor((float)x/16.0f), floor((float)z/16.0f));
 		return chunk.heights[rem_euclid(z, 16) * 16 + rem_euclid(z, 16)];
-	}
-
-	void place_tree(position_int pos)
-	{
-		int x = pos.x;
-        int z = pos.z;
-        int y = pos.y;
-        place_block(x, y, z, 146);
-        place_block(x, y + 1, z, 146);
-        place_block(x, y + 2, z, 146);
-        place_block(x, y + 3, z, 146);
-        place_block(x + 1, y + 3, z, 146);
-        place_block(x + 2, y + 3, z, 146);
-        place_block(x + 2, y + 4, z, 146);
-        place_block(x + 2, y + 5, z, 146);
-        int diff = 4;
-        int diff2 = 0;
-        for (int i = y + 5; i < y + 10;i++)
-        {
-            if (i == y + 7)
-            {
-                diff++;
-                diff2--;
-            }
-            if (i == y + 8)
-            {
-                diff--;
-                diff2++;
-            }
-            if (i == y + 9)
-            {
-                diff--;
-                diff2++;
-            }
-            for (int ii = (z - 2) + diff2; ii < z + diff; ii++)
-            {
-                for (int iii = x + diff2; iii < x + (diff + 2); iii++)
-                {
-                    int r = 50;
-                    if (r < 80)
-                        place_block(iii, i, ii, 404);
-                }
-            }
-        }
 	}
 };
