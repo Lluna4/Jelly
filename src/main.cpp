@@ -51,6 +51,7 @@ using json = nlohmann::json;
 
 json blocks;
 json items;
+json registry;
 enum states
 {
     HANDSHAKE,
@@ -1397,7 +1398,15 @@ void execute_packet(packet pkt, User &user)
                 std::tuple<minecraft::varint> item_id;
                 item_id = read_packet(item_id, pkt);
                 log(std::format("Got {} items with id {}", std::get<1>(set_slot).num, std::get<0>(item_id).num));
-                std::string name = items[std::get<0>(item_id).num]["name"];
+                std::string name;
+                for (auto &[key, value]: registry.items())
+                {
+                    if (atoi(value["protocol_id"].dump().c_str()) == std::get<0>(item_id).num)
+                    {
+                        name = key;
+                        break;
+                    }
+                }
                 log(std::format("name is {}", name), INFO);
                 user.inventory_item[std::get<0>(set_slot)] = std::get<0>(item_id).num;
                 if (std::get<0>(set_slot) == user.selected_inv)
@@ -1406,14 +1415,21 @@ void execute_packet(packet pkt, User &user)
                     minecraft::varint(1), std::get<0>(item_id), minecraft::varint(0), minecraft::varint(0));
                     send_everyone_except_user(set_equipment, user.sockfd);
                 }
-                for (auto obj: blocks)
+                bool has_block = false;
+                for (auto state: blocks[name]["states"])
                 {
-                    std::string name2 = obj["name"];
-                    if (name.compare(name2) == 0)
+                    if (state["properties"]["waterlogged"].is_null() == true || 
+                        state["properties"]["waterlogged"].dump().compare("\"false\"") == 0)
                     {
-                        user.inventory[std::get<0>(set_slot)] = obj["defaultState"];
+                        user.inventory[std::get<0>(set_slot)] = atol(state["id"].dump().c_str());
+                        log(std::format("block is {}", atol(state["id"].dump().c_str())), INFO);
+                        has_block = true;
                         break;
                     }
+                }
+                if (has_block == false)
+                {
+                    user.inventory[std::get<0>(set_slot)] = 0;
                 }
             }
             else if (std::get<1>(set_slot).num == 0)
@@ -1769,6 +1785,7 @@ int main(int argc, char *argv[])
     std::thread read_t(recv_thread, std::ref(user_mut));
     read_t.detach();
     std::thread world_th(chunk_send_th, pipefds[0], std::ref(user_mut));
+    log("Starting world generation", INFO);
     for (int z = -12; z < 12; z++)
     {
         for (int x = -12; x < 12; x++)
@@ -1777,12 +1794,13 @@ int main(int argc, char *argv[])
         }
     }
     log("world created", INFO);
-    std::ifstream f("items.json");
-    items = json::parse(f);
-    f.close();
-    std::ifstream fs("blocks.json");
-    blocks = json::parse(fs);
-    fs.close();
+    std::ifstream reg("../generated/reports/registries.json");
+    registry = json::parse(reg)["minecraft:item"]["entries"];
+    reg.close();
+    std::ifstream reg2("../generated/reports/blocks.json");
+    blocks = json::parse(reg2);
+    reg2.close();
+
     int ticks_until_keep_alive = 200;
     while (true)
     {   
