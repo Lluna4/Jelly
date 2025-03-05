@@ -1398,38 +1398,12 @@ void execute_packet(packet pkt, User &user)
                 std::tuple<minecraft::varint> item_id;
                 item_id = read_packet(item_id, pkt);
                 log(std::format("Got {} items with id {}", std::get<1>(set_slot).num, std::get<0>(item_id).num));
-                std::string name;
-                for (auto &[key, value]: registry.items())
-                {
-                    if (atoi(value["protocol_id"].dump().c_str()) == std::get<0>(item_id).num)
-                    {
-                        name = key;
-                        break;
-                    }
-                }
-                log(std::format("name is {}", name), INFO);
                 user.inventory_item[std::get<0>(set_slot)] = std::get<0>(item_id).num;
                 if (std::get<0>(set_slot) == user.selected_inv)
                 {
                     auto set_equipment = std::make_tuple(minecraft::varint(0x5B), minecraft::varint(user.sockfd), (char)0, 
                     minecraft::varint(1), std::get<0>(item_id), minecraft::varint(0), minecraft::varint(0));
                     send_everyone_except_user(set_equipment, user.sockfd);
-                }
-                bool has_block = false;
-                for (auto state: blocks[name]["states"])
-                {
-                    if (state["properties"]["waterlogged"].is_null() == true || 
-                        state["properties"]["waterlogged"].dump().compare("\"false\"") == 0)
-                    {
-                        user.inventory[std::get<0>(set_slot)] = atol(state["id"].dump().c_str());
-                        log(std::format("block is {}", atol(state["id"].dump().c_str())), INFO);
-                        has_block = true;
-                        break;
-                    }
-                }
-                if (has_block == false)
-                {
-                    user.inventory[std::get<0>(set_slot)] = 0;
                 }
             }
             else if (std::get<1>(set_slot).num == 0)
@@ -1447,18 +1421,42 @@ void execute_packet(packet pkt, User &user)
             int z = val << 26 >> 38;
             
             minecraft::varint face = std::get<2>(use_item_on);
+            std::string place_string = "no";
+            std::string axis_string = "no";
             if (face.num == 0)
+            {
                 y--;
+                axis_string = "\"y\"";
+            }
             else if (face.num == 1)
+            {
                 y++;
+                axis_string = "\"y\"";
+            }
             else if (face.num == 2)
+            {
                 z--;
+                place_string = "\"north\"";
+                axis_string = "\"z\"";
+            }
             else if (face.num == 3)
+            {
                 z++;
+                place_string = "\"south\"";
+                axis_string = "\"z\"";
+            }
             else if (face.num == 4)
+            {
                 x--;
+                place_string = "\"west\"";
+                axis_string = "\"x\"";
+            }
             else if (face.num == 5)
+            {
                 x++;
+                place_string = "\"east\"";
+                axis_string = "\"x\"";
+            }
             
             for (auto us: users)
             {
@@ -1474,6 +1472,45 @@ void execute_packet(packet pkt, User &user)
             log(std::format("x {} y {} z {}", x, y, z), INFO);
             log(std::format("Placed block {} in position {}",user.inventory[user.selected_inv], user.selected_inv));
             unsigned char anim = 0;
+            unsigned long block_id = 0;
+            std::string name;
+            for (auto &[key, value]: registry.items())
+            {
+                if (atoi(value["protocol_id"].dump().c_str()) == user.inventory_item[user.selected_inv])
+                {
+                    name = key;
+                    break;
+                }
+            }
+            for (auto state: blocks[name]["states"])
+            {
+                if (state["properties"]["waterlogged"].is_null() == true || 
+                    state["properties"]["waterlogged"].dump().compare("\"false\"") == 0)
+                {
+                    if ((place_string.compare("no") == 0 && axis_string.compare("no") == 0) || (state["properties"]["facing"].is_null() == true
+                        && state["properties"]["axis"].is_null() == true))
+                    {
+                        block_id = atol(state["id"].dump().c_str());
+                        log(std::format("block is {}", atol(state["id"].dump().c_str())), INFO);
+                        break;
+                    }
+                    else if (state["properties"]["facing"].dump().compare(place_string) == 0)
+                    {
+                        log(std::format("facing is {}", state["properties"]["facing"].dump()), INFO);
+                        block_id = atol(state["id"].dump().c_str());
+                        log(std::format("block is {}", atol(state["id"].dump().c_str())), INFO);
+                        break;
+                    }
+                    else if (state["properties"]["axis"].dump().compare(axis_string) == 0)
+                    {
+                        log(std::format("axis is {}", state["properties"]["axis"].dump()), INFO);
+                        block_id = atol(state["id"].dump().c_str());
+                        log(std::format("block is {}", atol(state["id"].dump().c_str())), INFO);
+                        break;
+                    }
+                }
+            }
+
             if (std::get<0>(use_item_on).num == 1)
                 anim = 3;
             std::tuple<minecraft::varint, minecraft::varint, unsigned char> entity_animation =
@@ -1487,10 +1524,10 @@ void execute_packet(packet pkt, User &user)
                 spawn_entity(ai_entities.back());
                 return;
             }
-            World.place_block(x, y, z, minecraft::varint(user.inventory[user.selected_inv]));
+            World.place_block(x, y, z, minecraft::varint(block_id));
             std::tuple<minecraft::varint, long, minecraft::varint> update_block =
             {
-                minecraft::varint(0x09), (long long)((((x & (unsigned long)0x3FFFFFF) << 38) | ((z & (unsigned long)0x3FFFFFF) << 12) | (y & (unsigned long)0xFFF))), minecraft::varint(user.inventory[user.selected_inv])
+                minecraft::varint(0x09), (long long)((((x & (unsigned long)0x3FFFFFF) << 38) | ((z & (unsigned long)0x3FFFFFF) << 12) | (y & (unsigned long)0xFFF))), minecraft::varint(block_id)
             };
             send_everyone_visible(update_block, x, y, z);
             
