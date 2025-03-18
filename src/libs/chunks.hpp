@@ -1,18 +1,12 @@
 #pragma once
-#include <iostream>
-#include <vector>
 #include <unordered_map>
-#include <map>
+#include <vector>
+#include <utility>
+#include "math.h"
+#include "logging.hpp"
 #include "utils.hpp"
 #include "PerlinNoise.hpp"
 
-enum palette_type
-{
-	SINGLE_VALUED,
-	INDIRECT,
-	DIRECT
-};
-bool LIGHT_POSTPROCESSING = true;
 unsigned int s = 0;
 
 struct dot
@@ -36,237 +30,124 @@ struct dot
 
 struct position_int
 {
+	position_int(int x_, int y_, int z_)
+	:x(x_), y(y_), z(z_)
+	{}
 	int x, y, z;
+
+    bool operator<(const position_int& other) const 
+	{
+        if (x != other.x) return x < other.x;
+        if (y != other.y) return y < other.y;
+        return z < other.z;
+    }
 };
 
+struct structure
+{
+	structure()
+	{
+		int x_ = 0;
+		int z_ = 0;
+		int height_ = 0;
+		blocks.emplace(
+			std::piecewise_construct,
+			std::forward_as_tuple(x_, height_, z_),
+			std::forward_as_tuple(146)
+		);
+		blocks.emplace(
+			std::piecewise_construct,
+			std::forward_as_tuple(x_, height_ + 1, z_),
+			std::forward_as_tuple(146)
+		);
+		blocks.emplace(
+			std::piecewise_construct,
+			std::forward_as_tuple(x_, height_ + 2, z_),
+			std::forward_as_tuple(146)
+		);
+		blocks.emplace(
+			std::piecewise_construct,
+			std::forward_as_tuple(x_, height_ + 3, z_),
+			std::forward_as_tuple(146)
+		);
+		blocks.emplace(
+			std::piecewise_construct,
+			std::forward_as_tuple(x_ + 1, height_ + 3, z_),
+			std::forward_as_tuple(146)
+		);
+		blocks.emplace(
+			std::piecewise_construct,
+			std::forward_as_tuple(x_ + 2, height_ + 3, z_),
+			std::forward_as_tuple(146)
+		);
+		blocks.emplace(
+			std::piecewise_construct,
+			std::forward_as_tuple(x_ + 2, height_ + 4, z_),
+			std::forward_as_tuple(146)
+		);
+		blocks.emplace(
+			std::piecewise_construct,
+			std::forward_as_tuple(x_+ 2, height_ + 5, z_),
+			std::forward_as_tuple(146)
+		);
+		int diff = 4;
+		int diff2 = 0;
+		for (int i = height_ + 5; i < height_ + 10;i++)
+		{
+			if (i == height_ + 7)
+			{
+				diff++;
+				diff2--;
+			}
+			if (i == height_ + 8)
+			{
+				diff--;
+				diff2++;
+			}
+			if (i == height_ + 9)
+			{
+				diff--;
+				diff2++;
+			}
+			for (int ii = (z_ - 2) + diff2; ii < z_ + diff; ii++)
+			{
+				for (int iii = x_ + diff2; iii < x_ + (diff + 2); iii++)
+				{
+					int r = 50;
+					if (r < 80)
+					blocks.emplace(
+						std::piecewise_construct,
+						std::forward_as_tuple(iii, i, ii),
+						std::forward_as_tuple(404)
+					);
+				}
+			}
+		}
+	}
+
+	structure(std::map<position_int, int> structure)
+	:blocks(structure)
+	{}
+
+	std::map<position_int, int> blocks;
+};
+
+struct block_pos
+{
+	block_pos(int x_, int y_, int z_, minecraft::varint b_id)
+	:x(x_), y(y_), z(z_), block_id(b_id)
+	{}
+	int x, y, z;
+	minecraft::varint block_id;
+};
 
 std::map<double, dot> t_map = {{-1.0, dot(30, 64, -1.0, -0.1)}, {-0.1, dot(64, 75, -0.1, 0.4)}, {0.4, dot(75, 90, 0.4, 0.6)},
 								{0.6, dot(90, 100, 0.6, 0.8)}, {0.8, dot(100, 130, 0.8, 0.9)}, {0.9, dot(130, 140, 0.9, 1.0)}};
 std::map<double, dot> t_map2 = {{-1.0, dot(-5, -2, -1.0, -0.5)}, {-0.5, dot(-2, 1, -0.5, 0.0)}, {0.0, dot(1, 4, 0.0, 1.0)}};
 std::map<double, dot> t_map3 = {{-1.0, dot(-30, -20, -1.0, -0.8)}, {-0.8, dot(-20, -5, -0.8, 0.0)}, {0.0, dot(-5, 30, 0.0, 0.5)},
 								{0.5, dot(15, 20, 0.5, 1.0)}};
-
-namespace minecraft
+namespace std 
 {
-	struct paletted_container
-	{
-		paletted_container()
-		{
-			type = SINGLE_VALUED;
-			value = 0;
-			data_size = varint(0);
-			data = std::make_unique<char []>(1);
-			data[0] = 0;
-		}
-		paletted_container(unsigned char bpe,bool chunk, varint val = 0, std::vector<varint> pal = {0})
-		:bits_per_entry(bpe)
-		{
-			if (bpe == 0)
-			{
-				type = SINGLE_VALUED;
-				value = val;
-				data_size = varint(0);
-				data = std::make_unique<char []>(1);
-				data[0] = 0;
-			}
-			else if (bpe == 8)
-			{
-				if (chunk == true)
-				{
-					type = INDIRECT;
-					palette = pal;
-					data = std::make_shared<char []>(4097);
-					if (data == NULL)
-						std::runtime_error("Malloc failed");
-					data_size = varint(512);
-				}
-			}
-		}
-		int type;
-		unsigned char bits_per_entry;
-		varint value;
-		std::vector<varint> palette;
-		varint data_size;
-		std::shared_ptr<char[]> data;
-	};
-	char_size calc_light(minecraft::paletted_container data)
-	{
-		char *dat = data.data.get();
-		char a[4096] = {0};
-		if (data.type == SINGLE_VALUED)
-		{
-			if(data.value.num == 0)
-			{	
-				dat = a;
-			}
-		}
-		
-		std::vector<char> light_data;
-		int zero_id = 0;
-		for (int i = 0; i < data.palette.size();i++)
-		{
-			if (data.palette[i].num == 0)
-			{
-				zero_id = i;
-				break;
-			}
-		}
-		//std::println("zero id is {}", zero_id);
-		light_data.resize(4096);
-		for (int z = 0; z < 16;z++)
-		{
-			for (int x = 0; x < 16; x++)
-			{
-				char light_ray_intensity = 15;
-				for (int y = 15; y >= 0; y--)
-				{
-					light_data[(y*256) + (z*16) + x] = light_ray_intensity;
-					if (dat[(y*256) + (z*16) + x] != zero_id)
-					{
-						light_ray_intensity = 0;
-						//std::println("Got a block at x {} y {} z {}, id {}", x, y, z, (int)dat[(y*256) + (z*16) + x]);
-					}
-				}
-			}
-		}
-		for (int z = 0; z < 16;z++)
-		{
-			for (int x = 0; x < 16; x++)
-			{
-				for (int y = 15; y >= 0; y--)
-				{
-					if (light_data[(y*256) + (z*16) + x] == 0)
-					{
-						int end_data = 0;
-						for (int i = 1; i < 15;i++)
-						{
-							if (x - 1 < 0 || y - 1 < 0 || z - 1 < 0)
-								break;
-							if (x + 1 > 15 || y + 1 > 15 || z + 1 > 15)
-								break;
-							if (light_data[(y*256) + (z*16) + (x + i)] == 15 || light_data[(y*256) + (z*16) + (x - i)] == 15)
-							{
-								end_data = 15 - i;
-								break;
-							}
-							if (light_data[(y*256) + ((z + i)*16) + x] == 15 || light_data[(y*256) + ((z - 1)*16) + x] == 15)
-							{
-								end_data = 15 - i;
-								break;
-							}
-							if (light_data[(y*256) + ((z + i)*16) + (x + i)] == 15 || light_data[(y*256) + ((z - i)*16) + (x - i)] == 15)
-							{
-								end_data = 15 - i;
-								break;
-							}
-							if (light_data[(y*256) + ((z - i)*16) + (x + i)] == 15 || light_data[(y*256) + ((z + i)*16) + (x - i)] == 15)
-							{
-								end_data = 15 - i;
-								break;
-							}
-						}
-						for (int y_ = y; y_ >= 0; y_--)
-						{
-							light_data[(y_*256) + (z*16) + x] = end_data;
-						}
-					}
-				}
-			}
-		}
-		char *encoded_val = (char *)calloc(2048, sizeof(char));
-		int encoded_index = 0;
-		for (int x = 0; x < light_data.size();x += 2)
-		{
-			encoded_val[encoded_index] |= light_data[x];
-			encoded_val[encoded_index] = (encoded_val[encoded_index] << 4) | light_data[x + 1];
-			encoded_index++;
-		}
-		char_size ret = {.data = mem_dup(encoded_val, 2048), .consumed_size = 2048, .max_size = 2048, .start_data = nullptr};
-		ret.start_data = ret.data;
-		free(encoded_val);
-		return ret;
-	}
-
-	struct chunk_section
-	{
-		chunk_section(bool full,bool lighting = false,std::vector<varint> palette = {varint(0), varint(1)})
-		{
-			if (full)
-			{
-				block_count = 4096;
-				blocks = paletted_container(8, true, 0, palette);
-				biome = paletted_container(0, false);
-			}
-			else
-			{
-				block_count = 0;
-				blocks = paletted_container(0, true);
-				biome = paletted_container(0, false);
-			}
-		}
-		short block_count;
-		paletted_container blocks;
-		paletted_container biome;
-		char_size light;
-	};
-	struct chunk
-	{
-		chunk()
-		{
-			for (int i = 0; i < 24; i++)
-			{
-					sections.emplace_back(false);
-			}
-			x = 0;
-			z = 0;
-		}
-		chunk(int x_, int z_, char surface = 8,std::vector<varint> palette = {varint(0), varint(9)})
-		:x(x_), z(z_)
-		{
-			for (int i = 0; i < 24; i++)
-			{
-				sections.emplace_back(false, true, palette);
-			}
-		}
-
-		void place_block(int x, int y, int z, minecraft::varint block_id)
-		{
-			int section_index = (y + 64)/16;
-			int index = 0;
-			if (sections[section_index].blocks.type == SINGLE_VALUED)
-			{
-				sections[section_index].blocks = paletted_container(8, true, 0, {minecraft::varint(0), minecraft::varint(block_id)});
-				index = 1;
-			}
-			else if (sections[section_index].blocks.type == INDIRECT)
-			{
-				bool found = false;
-				for (int i = 0; i < sections[section_index].blocks.palette.size(); i++)
-				{
-					if (sections[section_index].blocks.palette[i] == block_id)
-					{
-						index = i;
-						found = true;
-						break;
-					}
-				}
-				if (found == false)
-				{
-					index = sections[section_index].blocks.palette.size();
-					sections[section_index].blocks.palette.push_back(block_id);
-				}
-			}
-			sections[section_index].blocks.data[(rem_euclid(y, 16)*256) + (z*16) + x] = index;
-			sections[section_index].block_count += 1;
-		}
-		int x;
-		int z;
-		std::vector<chunk_section> sections;
-		std::vector<position_int> trees;
-	};
-};
-
-namespace std {
   template <>
   struct hash<std::pair<int, int>> 
   {
@@ -275,25 +156,209 @@ namespace std {
     }
   };
 }
-
-std::unordered_map<std::pair<int, int>, minecraft::chunk> chunks;
-
-minecraft::chunk &find_chunk(int x, int z)
+std::unordered_map<std::pair<int, int>, std::vector<block_pos>> blocks_to_place;
+struct section
 {
-	if (chunks.find({x, z}) == chunks.end()) //if it doesnt find a chunk it generates one
+	section(int pos, bool single_value = false, minecraft::varint value = 0)
+	:position(pos),single_val(single_value) ,val(value)
 	{
+		if (single_value == false)
+		{
+			blocks.resize(16);
+			for (auto &z: blocks)
+			{
+				z.resize(16);
+				for (auto &x: z)
+				{
+					x.resize(16);
+				}
+			}
+			block_count = 0;
+			//generated = false;
+			palette.push_back(minecraft::varint(0));
+		}
+		else
+		{
+			palette.push_back(minecraft::varint(0));
+			if (value != 0)
+			{
+				block_count = 4096;
+				palette.push_back(value);
+			}
+			else
+			{
+				block_count = 0;
+			}
+		}
+	}
+	minecraft::varint val;
+	bool single_val;
+	std::vector<std::vector<std::vector<char>>> blocks;
+	short block_count;
+	//bool generated;
+	int position;
+	std::vector<minecraft::varint> palette;
+
+	void place_block(int x, int y, int z, minecraft::varint block_id)
+	{
+		int index = -1;
+
+		for (int i = 0; i < palette.size(); i++)
+		{
+			if (palette[i].num == block_id.num)
+			{
+				index = i;
+				break;
+			}
+		}
+		if (index == -1)
+		{
+			palette.push_back(block_id);
+			if (single_val == true)
+			{
+				blocks.resize(16);
+				for (auto &z: blocks)
+				{
+					z.resize(16);
+					for (auto &x: z)
+					{
+						x.resize(16);
+						if (val != 0)
+							std::fill(x.begin(), x.end(), 1);
+					}
+				}
+				single_val = false;	
+			}
+			blocks[y][z][x] = palette.size() - 1;
+		}
+		else
+		{
+			if (single_val == true)
+			{
+				blocks.resize(16);
+				for (auto &z: blocks)
+				{
+					z.resize(16);
+					for (auto &x: z)
+					{
+						x.resize(16);
+						if (val != 0)
+							std::fill(x.begin(), x.end(), 1);
+					}
+				}
+				single_val = false;
+			}
+			blocks[y][z][x] = index;
+		}
+		if (block_id == 0)
+			block_count--;
+		if (block_id != 0)
+			block_count++;
+		if (block_count == 4096)
+		{
+			auto value = blocks[0][0][0];
+			for (auto &z: blocks)
+			{
+				for (auto &x: z)
+				{
+					for (auto block: x)
+					if (value != block)
+						return;
+				}
+			}
+			single_val = true;
+			val = palette[value];
+			blocks.clear();
+		}
+	}
+};
+
+struct chunk
+{
+	chunk(int pos_x, int pos_z)
+	:x(pos_x), z(pos_z)
+	{
+		for (int i = 0; i < 24; i++)
+		{
+			if (i < 4)
+				sections.emplace_back(i, true, 10);
+			sections.emplace_back(i, true);
+		}
+		generated = false;
+		heights.resize(16*16);
+	}
+	std::vector<section> sections;
+	int x, z;
+	bool generated;
+	std::vector<position_int> trees;
+	std::vector<int> heights;
+	void place_block(int x, int y, int z, minecraft::varint block_id)
+	{
+		int section = (y + 64)/16;
+		sections[section].place_block(x, rem_euclid(y, 16), z, block_id);
+	}
+	std::pair<position_int, position_int> translate_to_other_chunk(position_int block_pos)
+	{
+		position_int ret = block_pos;
+		position_int chunk_ret = {x, 0, z}; 
+
+		if (block_pos.x >= 16 || block_pos.x < 0) {
+			int chunk_offset = (block_pos.x >= 0) ? block_pos.x / 16 : (block_pos.x - 15) / 16;
+			ret.x = rem_euclid(block_pos.x, 16);
+			chunk_ret.x += chunk_offset;
+		}
+
+		if (block_pos.z >= 16 || block_pos.z < 0) {
+			int chunk_offset = (block_pos.z >= 0) ? block_pos.z / 16 : (block_pos.z - 15) / 16;
+			ret.z = rem_euclid(block_pos.z, 16);
+			chunk_ret.z += chunk_offset;
+		}
+
+		return std::make_pair(ret, chunk_ret);
+	}
+};
+
+struct world
+{
+	std::unordered_map<std::pair<int, int>, chunk> chunks;
+	structure Structure;
+
+	void place_translated_block(position_int block_p, chunk &chunk, minecraft::varint block_id)
+	{
+		auto positions = chunk.translate_to_other_chunk(block_p);
+		auto bl = blocks_to_place.find(std::make_pair(positions.second.x, positions.second.z));
+		if (bl != blocks_to_place.end())
+		{
+			bl->second.push_back({positions.first.x, positions.first.y, positions.first.z, block_id});
+		}
+		else
+		{
+			std::vector<block_pos> a = {{positions.first.x, positions.first.y, positions.first.z, block_id}};
+			blocks_to_place.insert({std::make_pair(positions.second.x, positions.second.z), a});
+		}
+	}
+
+	chunk &generate_chunk(int x, int z, bool trees = true)
+	{
+		auto chunk1 = chunks.find(std::make_pair(x, z));
+		if (chunk1 != chunks.end())
+		{
+			return chunk1->second;
+		}
+		auto chunk_r = chunks.emplace(std::piecewise_construct,
+            std::forward_as_tuple(x, z),
+            std::forward_as_tuple(x, z));
+		chunk &chunk = chunk_r.first->second;
 		const siv::PerlinNoise::seed_type seed = s;
 
 		const siv::PerlinNoise perlin{ seed };
- 	 	chunks.emplace(std::piecewise_construct,
-                    std::forward_as_tuple(x, z),
-                    std::forward_as_tuple(x, z));
-		auto &chunk = chunks[{x, z}];
 		for (int z_ = 0; z_ < 16; z_++)
 		{
 			for (int x_ = 0; x_ < 16; x_++)
 			{
-				const double noise = perlin.octave2D_11(((x_ + (x * 16)) * 0.002), ((z_ + (z * 16)) * 0.002), 6);
+				int worldX = x * 16 + x_;
+				int worldZ = z * 16 + z_;
+				const double noise = perlin.octave2D_11((worldX * 0.002), (worldZ * 0.002), 6);
 				
 				int height_ = 0;
 				for (auto p: t_map)
@@ -307,18 +372,16 @@ minecraft::chunk &find_chunk(int x, int z)
 						}
 					}
 				}
+				chunk.heights[z_ * 16 + x_] = height_;
 				//log(height_, INFO);
-				for (int y = 0; y < height_; y++)
+				for (int y = 16; y < height_; y++)
 				{
 					if (y == height_ - 1)
 					{
 						chunk.place_block(x_, y, z_, 9);
 						int randomnumber = random()%10;
 						int random2 = random()%1000;
-						if (random2 > 995)
-						{
-							chunk.trees.emplace_back(x_ +(x * 16), height_, z_ + (z * 16));
-						}
+
 						if (randomnumber < 3)
 						{
 							chunk.place_block(x_, y + 1, z_, 2005);
@@ -326,6 +389,13 @@ minecraft::chunk &find_chunk(int x, int z)
 						else if (randomnumber > 9)
 						{
 							chunk.place_block(x_, y + 1, z_, 10756);
+						}
+						if (random2 > 995 && y >= 64 && trees == true)
+						{
+							for (auto block: Structure.blocks)
+							{
+								place_translated_block({x_ + block.first.x, height_ + block.first.y, z_ + block.first.z}, chunk, block.second);
+							}
 						}
 					}
 					else
@@ -345,18 +415,18 @@ minecraft::chunk &find_chunk(int x, int z)
 				}
 			}
 		}
+		chunk.generated = true;
+		return chunk;
 	}
-	return chunks[{x, z}];
-}
-
-void free_chunks()
-{
-	for (auto chunk: chunks)
+	void place_block(int x, int y, int z, minecraft::varint block_id)
 	{
-		auto a = chunk.second.sections;
-		for (int i = 0; i < a.size();i++)
-		{
-			free((a[i].light).data);
-		}
+		auto &chunk = generate_chunk(floor((float)x/16.0f), floor((float)z/16.0f));
+		chunk.place_block(rem_euclid(x, 16), y, rem_euclid(z, 16), block_id);
 	}
-}
+	
+	int get_height(int x, int z)
+	{
+	    auto &chunk = generate_chunk(floor((float)x/16.0f), floor((float)z/16.0f));
+		return chunk.heights[rem_euclid(z, 16) * 16 + rem_euclid(z, 16)];
+	}
+};

@@ -29,7 +29,7 @@
 #include <fcntl.h>
 #include "libs/comp_time_write.hpp"
 #include "libs/comp_time_read.hpp"
-#include "libs/chunks2.hpp"
+#include "libs/chunks.hpp"
 #include "libs/tokenize.hpp"
 #include "libs/config.hpp"
 #include "libs/localization.hpp"
@@ -241,6 +241,98 @@ struct entity
 };
 
 std::vector<entity> ai_entities;
+
+int get_state(int item_id, position pos, angles angle, minecraft::varint face)
+{
+    std::string name;
+	std::string facing;
+	std::string axis;
+	bool open;
+	bool powered;
+	bool waterlogged;
+    int block_id = 0;
+    if (face.num == 0)
+    {
+        axis = "\"y\"";
+    }
+    else if (face.num == 1)
+    {
+        axis = "\"y\"";
+    }
+    else if (face.num == 2)
+    {
+        axis = "\"z\"";
+    }
+    else if (face.num == 3)
+    {
+        axis = "\"z\"";
+    }
+    else if (face.num == 4)
+    {
+        axis = "\"x\"";
+    }
+    else if (face.num == 5)
+    {
+        axis = "\"x\"";
+    }
+
+    if (angle.yaw < 45 && angle.yaw > -45)
+    {
+        facing = "\"north\"";
+    }
+    else if (angle.yaw >= 45 && angle.yaw <= 135)
+    {
+        facing = "\"east\"";
+    }
+    else if (angle.yaw >= -135 && angle.yaw <= -45)
+    {
+        facing = "\"west\"";
+    }
+    if (abs(angle.yaw) > 135)
+    {
+        facing = "\"south\"";
+    }
+    for (auto &[key, value]: registry.items())
+    {
+        if (atoi(value["protocol_id"].dump().c_str()) == item_id)
+        {
+            name = key;
+            break;
+        }
+    }
+
+    for (auto state: blocks[name]["states"])
+    {
+        std::string facing2 = state["properties"]["facing"].dump();
+        if (state["properties"]["waterlogged"].is_null() == true || 
+            state["properties"]["waterlogged"].dump().compare("\"false\"") == 0)
+        {
+            if (((facing.compare("no") == 0 || state["properties"]["facing"].is_null() == true) && (axis.compare("no") == 0
+                || state["properties"]["axis"].is_null() == true)) && state["default"] == true)
+            {
+                block_id = atol(state["id"].dump().c_str());
+                log(std::format("block is {}", atol(state["id"].dump().c_str())), INFO);
+                break;
+            }
+            else if (facing2.compare(facing) == 0)
+            {
+                log(std::format("facing is {}", state["properties"]["facing"].dump()), INFO);
+                log(std::format("Yaw is {}", angle.yaw), INFO);
+                block_id = atol(state["id"].dump().c_str());
+                log(std::format("block is {}", atol(state["id"].dump().c_str())), INFO);
+                break;
+            }
+            else if (state["properties"]["axis"].dump().compare(axis) == 0)
+            {
+                log(std::format("axis is {}", state["properties"]["axis"].dump()), INFO);
+                block_id = atol(state["id"].dump().c_str());
+                log(std::format("block is {}", atol(state["id"].dump().c_str())), INFO);
+                break;
+            }
+        }
+    }
+    return block_id;
+}
 
 void accept_th(int sock, std::mutex &mut)
 {
@@ -1299,8 +1391,13 @@ void execute_packet(packet pkt, User &user)
             user.pos.x = std::get<0>(position_rotation_set);
             user.pos.y = std::get<1>(position_rotation_set);
             user.pos.z = std::get<2>(position_rotation_set);
-            user.angle.yaw = std::get<3>(position_rotation_set);
-            user.angle.pitch = std::get<4>(position_rotation_set);
+            user.angle.yaw = fmodf(std::get<3>(position_rotation_set) + 180.0f, 360.0f);
+            if (user.angle.yaw < 0)
+                user.angle.yaw += 360.0f;
+            user.angle.yaw -= 180.0f;
+            user.angle.pitch = fmodf(std::get<4>(position_rotation_set), 360.0f);
+            if (user.angle.pitch < 0)
+                user.angle.pitch += 360.0f;
             user.on_ground = std::get<5>(position_rotation_set);
             log(std::format("Moved to x {} y {} z {} on_ground {} (2)", user.pos.x, user.pos.y, user.pos.z, user.on_ground), INFO);
         }
@@ -1308,8 +1405,13 @@ void execute_packet(packet pkt, User &user)
         {
             std::tuple<float, float ,bool> rotation_set;
             rotation_set = read_packet(rotation_set, pkt);
-            user.angle.yaw = std::get<0>(rotation_set);
-            user.angle.pitch = std::get<1>(rotation_set);
+            user.angle.yaw = fmodf(std::get<0>(rotation_set) + 180.0f, 360.0f);
+            if (user.angle.yaw < 0)
+                user.angle.yaw += 360.0f;
+            user.angle.yaw -= 180.0f;
+            user.angle.pitch = fmodf(std::get<1>(rotation_set), 360.0f);
+            if (user.angle.pitch < 0)
+                user.angle.pitch += 360.0f;
             user.on_ground = std::get<2>(rotation_set);
         }
         else if (pkt.id == 0x1D)
@@ -1426,38 +1528,27 @@ void execute_packet(packet pkt, User &user)
             if (face.num == 0)
             {
                 y--;
-                axis_string = "\"y\"";
             }
             else if (face.num == 1)
             {
                 y++;
-                axis_string = "\"y\"";
             }
             else if (face.num == 2)
             {
                 z--;
-                place_string = "\"north\"";
-                axis_string = "\"z\"";
             }
             else if (face.num == 3)
             {
                 z++;
-                place_string = "\"south\"";
-                axis_string = "\"z\"";
             }
             else if (face.num == 4)
             {
                 x--;
-                place_string = "\"west\"";
-                axis_string = "\"x\"";
             }
             else if (face.num == 5)
             {
                 x++;
-                place_string = "\"east\"";
-                axis_string = "\"x\"";
             }
-            
             for (auto us: users)
             {
                 if (us.second.state == PLAY)
@@ -1472,44 +1563,7 @@ void execute_packet(packet pkt, User &user)
             log(std::format("x {} y {} z {}", x, y, z), INFO);
             log(std::format("Placed block {} in position {}",user.inventory[user.selected_inv], user.selected_inv));
             unsigned char anim = 0;
-            unsigned long block_id = 0;
-            std::string name;
-            for (auto &[key, value]: registry.items())
-            {
-                if (atoi(value["protocol_id"].dump().c_str()) == user.inventory_item[user.selected_inv])
-                {
-                    name = key;
-                    break;
-                }
-            }
-            for (auto state: blocks[name]["states"])
-            {
-                if (state["properties"]["waterlogged"].is_null() == true || 
-                    state["properties"]["waterlogged"].dump().compare("\"false\"") == 0)
-                {
-                    if ((place_string.compare("no") == 0 && axis_string.compare("no") == 0) || (state["properties"]["facing"].is_null() == true
-                        && state["properties"]["axis"].is_null() == true))
-                    {
-                        block_id = atol(state["id"].dump().c_str());
-                        log(std::format("block is {}", atol(state["id"].dump().c_str())), INFO);
-                        break;
-                    }
-                    else if (state["properties"]["facing"].dump().compare(place_string) == 0)
-                    {
-                        log(std::format("facing is {}", state["properties"]["facing"].dump()), INFO);
-                        block_id = atol(state["id"].dump().c_str());
-                        log(std::format("block is {}", atol(state["id"].dump().c_str())), INFO);
-                        break;
-                    }
-                    else if (state["properties"]["axis"].dump().compare(axis_string) == 0)
-                    {
-                        log(std::format("axis is {}", state["properties"]["axis"].dump()), INFO);
-                        block_id = atol(state["id"].dump().c_str());
-                        log(std::format("block is {}", atol(state["id"].dump().c_str())), INFO);
-                        break;
-                    }
-                }
-            }
+            unsigned long block_id = get_state(user.inventory_item[user.selected_inv], user.pos, user.angle, face);
 
             if (std::get<0>(use_item_on).num == 1)
                 anim = 3;

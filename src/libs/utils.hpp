@@ -33,6 +33,21 @@
 #define le64toh(x) OSSwapLittleToHostInt64(x)
 #endif
 
+enum FACING
+{
+	SOUTH,
+	NORTH,
+	WEST,
+	EAST
+};
+
+enum AXIS
+{
+	X,
+	Y,
+	Z
+};
+
 struct packet
 {
 	int id;
@@ -487,3 +502,5 @@ std::string random_string(int size)
     }
     return ret;
 }
+
+
