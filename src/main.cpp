@@ -242,14 +242,11 @@ struct entity
 
 std::vector<entity> ai_entities;
 
-int get_state(int item_id, position pos, angles angle, minecraft::varint face)
+int get_state(int item_id, position pos, angles angle, minecraft::varint face, json propierties)
 {
     std::string name;
 	std::string facing;
 	std::string axis;
-	bool open;
-	bool powered;
-	bool waterlogged;
     int block_id = 0;
     if (face.num == 0)
     {
@@ -300,35 +297,35 @@ int get_state(int item_id, position pos, angles angle, minecraft::varint face)
             break;
         }
     }
-
+    log(std::format("Starter facing: {}", facing), INFO);
     for (auto state: blocks[name]["states"])
     {
         std::string facing2 = state["properties"]["facing"].dump();
-        if (state["properties"]["waterlogged"].is_null() == true || 
-            state["properties"]["waterlogged"].dump().compare("\"false\"") == 0)
+        std::string axis2 = state["properties"]["axis"].dump();
+        state["properties"].erase("axis");
+        state["properties"].erase("facing");
+        log(std::format("{} {} {} {}", facing2, state["properties"].dump(), propierties.dump(), facing2.compare(facing) == 0 && state["properties"].dump().compare(propierties.dump()) == 0), INFO);
+        if (((facing.compare("no") == 0 || facing2.empty() == true) && (axis.compare("no") == 0
+            || axis2.empty() == true)) && state["default"] == true)
         {
-            if (((facing.compare("no") == 0 || state["properties"]["facing"].is_null() == true) && (axis.compare("no") == 0
-                || state["properties"]["axis"].is_null() == true)) && state["default"] == true)
-            {
-                block_id = atol(state["id"].dump().c_str());
-                log(std::format("block is {}", atol(state["id"].dump().c_str())), INFO);
-                break;
-            }
-            else if (facing2.compare(facing) == 0)
-            {
-                log(std::format("facing is {}", state["properties"]["facing"].dump()), INFO);
-                log(std::format("Yaw is {}", angle.yaw), INFO);
-                block_id = atol(state["id"].dump().c_str());
-                log(std::format("block is {}", atol(state["id"].dump().c_str())), INFO);
-                break;
-            }
-            else if (state["properties"]["axis"].dump().compare(axis) == 0)
-            {
-                log(std::format("axis is {}", state["properties"]["axis"].dump()), INFO);
-                block_id = atol(state["id"].dump().c_str());
-                log(std::format("block is {}", atol(state["id"].dump().c_str())), INFO);
-                break;
-            }
+            block_id = atol(state["id"].dump().c_str());
+            log(std::format("block is {}", atol(state["id"].dump().c_str())), INFO);
+            break;
+        }
+        else if (facing2.compare(facing) == 0 && state["properties"].dump().compare(propierties.dump()) == 0)
+        {
+            log(std::format("facing is {}", state["properties"]["facing"].dump()), INFO);
+            log(std::format("Yaw is {}", angle.yaw), INFO);
+            block_id = atol(state["id"].dump().c_str());
+            log(std::format("block is {}", atol(state["id"].dump().c_str())), INFO);
+            break;
+        }
+        else if (axis2.compare(axis) == 0 && state["properties"].dump().compare(propierties.dump()) == 0)
+        {
+            log(std::format("axis is {}", state["properties"]["axis"].dump()), INFO);
+            block_id = atol(state["id"].dump().c_str());
+            log(std::format("block is {}", atol(state["id"].dump().c_str())), INFO);
+            break;
         }
     }
     return block_id;
@@ -583,117 +580,29 @@ void status_response(User user)
 #ifdef __APPLE__
 void registry_data(User user)
 {
-    int fd = open("../Minecraft-DataRegistry-Packet-Generator/registries/1.21-registry/created-packets/banner_pattern.data", O_RDONLY);
-    off_t file_size = lseek(fd, 0, SEEK_END);
-    lseek(fd, 0, SEEK_SET);
-    sendfile(fd, user.sockfd, 0, &file_size, NULL, 0);
-    close(fd);
-    
-    fd = open("../Minecraft-DataRegistry-Packet-Generator/registries/1.21-registry/created-packets/chat_type.data", O_RDONLY);
-    file_size = lseek(fd, 0, SEEK_END);
-    lseek(fd, 0, SEEK_SET);
-    sendfile(fd, user.sockfd, 0, &file_size, NULL, 0);
-    close(fd);
-    
-    fd = open("../Minecraft-DataRegistry-Packet-Generator/registries/1.21-registry/created-packets/damage_type.data", O_RDONLY);
-    file_size = lseek(fd, 0, SEEK_END);
-    lseek(fd, 0, SEEK_SET);
-    sendfile(fd, user.sockfd, 0, &file_size, NULL, 0);
-    close(fd);
-    
-    fd = open("../Minecraft-DataRegistry-Packet-Generator/registries/1.21-registry/created-packets/dimension_type.data", O_RDONLY);
-    file_size = lseek(fd, 0, SEEK_END);
-    lseek(fd, 0, SEEK_SET);
-    sendfile(fd, user.sockfd, 0, &file_size, NULL, 0);
-    close(fd);
-
-    fd = open("../Minecraft-DataRegistry-Packet-Generator/registries/1.21-registry/created-packets/painting_variant.data", O_RDONLY);
-    file_size = lseek(fd, 0, SEEK_END);
-    lseek(fd, 0, SEEK_SET);
-    sendfile(fd, user.sockfd, 0, &file_size, NULL, 0);
-    close(fd);
-
-    fd = open("../Minecraft-DataRegistry-Packet-Generator/registries/1.21-registry/created-packets/trim_material.data", O_RDONLY);
-    file_size = lseek(fd, 0, SEEK_END);
-    lseek(fd, 0, SEEK_SET);
-    sendfile(fd, user.sockfd, 0, &file_size, NULL, 0);
-    close(fd);
-
-    fd = open("../Minecraft-DataRegistry-Packet-Generator/registries/1.21-registry/created-packets/trim_pattern.data", O_RDONLY);
-    file_size = lseek(fd, 0, SEEK_END);
-    lseek(fd, 0, SEEK_SET);
-    sendfile(fd, user.sockfd, 0, &file_size, NULL, 0);
-    close(fd);
-
-    fd = open("../Minecraft-DataRegistry-Packet-Generator/registries/1.21-registry/created-packets/wolf_variant.data", O_RDONLY);
-    file_size = lseek(fd, 0, SEEK_END);
-    lseek(fd, 0, SEEK_SET);
-    sendfile(fd, user.sockfd, 0, &file_size, NULL, 0);
-    close(fd);
-
-    fd = open("../Minecraft-DataRegistry-Packet-Generator/registries/1.21-registry/created-packets/worldgen/biome.data", O_RDONLY);
-    file_size = lseek(fd, 0, SEEK_END);
-    lseek(fd, 0, SEEK_SET);
-    sendfile(fd, user.sockfd, 0, &file_size, NULL, 0);
-    close(fd);
+    for (const auto &file: std::filesystem::recursive_directory_iterator("../Minecraft-DataRegistry-Packet-Generator/registries/1.21-registry/created-packets"))
+    {
+        log(file.path().c_str(), INFO);
+        int fd = open(file.path().c_str(), O_RDONLY);
+        off_t file_size = lseek(fd, 0, SEEK_END);
+        lseek(fd, 0, SEEK_SET);
+        sendfile(fd, user.sockfd, 0, &file_size, NULL, 0);
+        close(fd);
+    }
 }
 #endif
 #ifdef __linux__
 void registry_data(User user)
 {
-    int fd = open("../Minecraft-DataRegistry-Packet-Generator/registries/1.21-registry/created-packets/banner_pattern.data", O_RDONLY);
-    off_t file_size = lseek(fd, 0, SEEK_END);
-    lseek(fd, 0, SEEK_SET);
-    sendfile(user.sockfd, fd, 0, file_size);
-    close(fd);
-    
-    fd = open("../Minecraft-DataRegistry-Packet-Generator/registries/1.21-registry/created-packets/chat_type.data", O_RDONLY);
-    file_size = lseek(fd, 0, SEEK_END);
-    lseek(fd, 0, SEEK_SET);
-    sendfile(user.sockfd, fd, 0, file_size);
-    close(fd);
-    
-    fd = open("../Minecraft-DataRegistry-Packet-Generator/registries/1.21-registry/created-packets/damage_type.data", O_RDONLY);
-    file_size = lseek(fd, 0, SEEK_END);
-    lseek(fd, 0, SEEK_SET);
-    sendfile(user.sockfd, fd, 0, file_size);
-    close(fd);
-    
-    fd = open("../Minecraft-DataRegistry-Packet-Generator/registries/1.21-registry/created-packets/dimension_type.data", O_RDONLY);
-    file_size = lseek(fd, 0, SEEK_END);
-    lseek(fd, 0, SEEK_SET);
-    sendfile(user.sockfd, fd, 0, file_size);
-    close(fd);
-
-    fd = open("../Minecraft-DataRegistry-Packet-Generator/registries/1.21-registry/created-packets/painting_variant.data", O_RDONLY);
-    file_size = lseek(fd, 0, SEEK_END);
-    lseek(fd, 0, SEEK_SET);
-    sendfile(user.sockfd, fd, 0, file_size);
-    close(fd);
-
-    fd = open("../Minecraft-DataRegistry-Packet-Generator/registries/1.21-registry/created-packets/trim_material.data", O_RDONLY);
-    file_size = lseek(fd, 0, SEEK_END);
-    lseek(fd, 0, SEEK_SET);
-    sendfile(user.sockfd, fd, 0, file_size);
-    close(fd);
-
-    fd = open("../Minecraft-DataRegistry-Packet-Generator/registries/1.21-registry/created-packets/trim_pattern.data", O_RDONLY);
-    file_size = lseek(fd, 0, SEEK_END);
-    lseek(fd, 0, SEEK_SET);
-    sendfile(user.sockfd, fd, 0, file_size);
-    close(fd);
-
-    fd = open("../Minecraft-DataRegistry-Packet-Generator/registries/1.21-registry/created-packets/wolf_variant.data", O_RDONLY);
-    file_size = lseek(fd, 0, SEEK_END);
-    lseek(fd, 0, SEEK_SET);
-    sendfile(user.sockfd, fd, 0, file_size);
-    close(fd);
-
-    fd = open("../Minecraft-DataRegistry-Packet-Generator/registries/1.21-registry/created-packets/worldgen/biome.data", O_RDONLY);
-    file_size = lseek(fd, 0, SEEK_END);
-    lseek(fd, 0, SEEK_SET);
-    sendfile(user.sockfd, fd, 0, file_size);
-    close(fd);
+    for (const auto &file: std::filesystem::recursive_directory_iterator("../Minecraft-DataRegistry-Packet-Generator/registries/1.21-registry/created-packets"))
+    {
+        log(file.path().c_str(), INFO);
+        int fd = open(file.path().c_str(), O_RDONLY);
+        off_t file_size = lseek(fd, 0, SEEK_END);
+        lseek(fd, 0, SEEK_SET);
+        sendfile(fd, user.sockfd, 0, &file_size, NULL, 0);
+        close(fd);
+    }
 }
 #endif
 
@@ -852,6 +761,8 @@ void send_world(User &user)
         }
     }
     user.loading = false;
+    auto sync_pos = std::make_tuple(minecraft::varint(0x40), user.pos.x, user.pos.y, user.pos.z, user.angle.yaw, user.angle.pitch, (char)0, minecraft::varint(12));
+    send_check(sync_pos, user.sockfd);
 }
 
 void system_chat(minecraft::string message)
@@ -1563,8 +1474,37 @@ void execute_packet(packet pkt, User &user)
             log(std::format("x {} y {} z {}", x, y, z), INFO);
             log(std::format("Placed block {} in position {}",user.inventory[user.selected_inv], user.selected_inv));
             unsigned char anim = 0;
-            unsigned long block_id = get_state(user.inventory_item[user.selected_inv], user.pos, user.angle, face);
+            std::string name;
+            for (auto &[key, value]: registry.items())
+            {
+                if (atoi(value["protocol_id"].dump().c_str()) == user.inventory_item[user.selected_inv])
+                {
+                    name = key;
+                    break;
+                }
+            }
+            auto state = blocks[name]["states"];
+            unsigned long block_ids[2];
+            unsigned long block_id_index = 0;
+            for (auto states: state)
+            {
+                if (states["default"].is_null() == false)
+                {
+                    auto props = states["properties"];
+                    props.erase("facing");
+                    props.erase("axis");
+                    log(std::format("starter prop {}", props.dump()), INFO);
+                    block_ids[block_id_index] = get_state(user.inventory_item[user.selected_inv], user.pos, user.angle, face, props);
+                    block_id_index++;
+                    if (name.contains("door"))
+                    {
+                        props["half"] = "upper";
+                        block_ids[block_id_index] = get_state(user.inventory_item[user.selected_inv], user.pos, user.angle, face, props);
+                    }
 
+                    break;
+                }
+            }
             if (std::get<0>(use_item_on).num == 1)
                 anim = 3;
             std::tuple<minecraft::varint, minecraft::varint, unsigned char> entity_animation =
@@ -1578,12 +1518,16 @@ void execute_packet(packet pkt, User &user)
                 spawn_entity(ai_entities.back());
                 return;
             }
-            World.place_block(x, y, z, minecraft::varint(block_id));
-            std::tuple<minecraft::varint, long, minecraft::varint> update_block =
+            for (auto block_id: block_ids)
             {
-                minecraft::varint(0x09), (long long)((((x & (unsigned long)0x3FFFFFF) << 38) | ((z & (unsigned long)0x3FFFFFF) << 12) | (y & (unsigned long)0xFFF))), minecraft::varint(block_id)
-            };
-            send_everyone_visible(update_block, x, y, z);
+                World.place_block(x, y, z, minecraft::varint(block_id));
+                std::tuple<minecraft::varint, long, minecraft::varint> update_block =
+                {
+                    minecraft::varint(0x09), (long long)((((x & (unsigned long)0x3FFFFFF) << 38) | ((z & (unsigned long)0x3FFFFFF) << 12) | (y & (unsigned long)0xFFF))), minecraft::varint(block_id)
+                };
+                send_everyone_visible(update_block, x, y, z);
+                y++;
+            }
             
             std::tuple<minecraft::varint, minecraft::varint> awk_block =
             {
