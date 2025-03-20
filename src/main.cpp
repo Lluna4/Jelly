@@ -600,7 +600,7 @@ void registry_data(User user)
         int fd = open(file.path().c_str(), O_RDONLY);
         off_t file_size = lseek(fd, 0, SEEK_END);
         lseek(fd, 0, SEEK_SET);
-        sendfile(fd, user.sockfd, 0, &file_size, NULL, 0);
+        sendfile(user.sockfd, fd, 0, file_size);
         close(fd);
     }
 }
