@@ -1518,12 +1518,12 @@ void execute_packet(packet pkt, User &user)
                 spawn_entity(ai_entities.back());
                 return;
             }
-            for (auto block_id: block_ids)
+            for (int i = 0; i < block_id_index; i++)
             {
-                World.place_block(x, y, z, minecraft::varint(block_id));
+                World.place_block(x, y, z, minecraft::varint(block_ids[i]));
                 std::tuple<minecraft::varint, long, minecraft::varint> update_block =
                 {
-                    minecraft::varint(0x09), (long long)((((x & (unsigned long)0x3FFFFFF) << 38) | ((z & (unsigned long)0x3FFFFFF) << 12) | (y & (unsigned long)0xFFF))), minecraft::varint(block_id)
+                    minecraft::varint(0x09), (long long)((((x & (unsigned long)0x3FFFFFF) << 38) | ((z & (unsigned long)0x3FFFFFF) << 12) | (y & (unsigned long)0xFFF))), minecraft::varint(block_ids[i])
                 };
                 send_everyone_visible(update_block, x, y, z);
                 y++;
