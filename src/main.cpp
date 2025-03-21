@@ -275,19 +275,19 @@ int get_state(int item_id, position pos, angles angle, minecraft::varint face, j
 
     if (angle.yaw < 45 && angle.yaw > -45)
     {
-        facing = "\"north\"";
+        facing = "\"south\"";
     }
     else if (angle.yaw >= 45 && angle.yaw <= 135)
     {
-        facing = "\"east\"";
+        facing = "\"west\""; 
     }
     else if (angle.yaw >= -135 && angle.yaw <= -45)
     {
-        facing = "\"west\"";
+        facing = "\"east\"";
     }
     if (abs(angle.yaw) > 135)
     {
-        facing = "\"south\"";
+        facing = "\"north\"";
     }
     for (auto &[key, value]: registry.items())
     {
@@ -589,8 +589,8 @@ void registry_data(User user)
         sendfile(fd, user.sockfd, 0, &file_size, NULL, 0);
         close(fd);
     }
-}
-#endif
+} 
+#endif 
 #ifdef __linux__
 void registry_data(User user)
 {
@@ -1474,7 +1474,7 @@ void execute_packet(packet pkt, User &user)
             log(std::format("x {} y {} z {}", x, y, z), INFO);
             log(std::format("Placed block {} in position {}",user.inventory[user.selected_inv], user.selected_inv));
             unsigned char anim = 0;
-            std::string name;
+            std::string name = "no";
             for (auto &[key, value]: registry.items())
             {
                 if (atoi(value["protocol_id"].dump().c_str()) == user.inventory_item[user.selected_inv])
@@ -1483,6 +1483,8 @@ void execute_packet(packet pkt, User &user)
                     break;
                 }
             }
+            if (name.compare("no") == 0 || name.compare("minecraft:air") == 0)
+                return;
             auto state = blocks[name]["states"];
             unsigned long block_ids[2];
             unsigned long block_id_index = 0;
@@ -1500,6 +1502,7 @@ void execute_packet(packet pkt, User &user)
                     {
                         props["half"] = "upper";
                         block_ids[block_id_index] = get_state(user.inventory_item[user.selected_inv], user.pos, user.angle, face, props);
+                        block_id_index++;
                     }
 
                     break;
